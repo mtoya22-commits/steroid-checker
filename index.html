@@ -10,15 +10,48 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: #f1f5f9; font-family: 'Noto Sans JP', 'Hiragino Sans', sans-serif; }
-  button { font-family: 'Noto Sans JP', 'Hiragino Sans', sans-serif; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #f1f5f9; font-family: 'Noto Sans JP', 'Hiragino Sans', sans-serif; }
+button { font-family: 'Noto Sans JP', 'Hiragino Sans', sans-serif; }
+
+.drug-search {
+  width: 100%;
+  padding: 11px 14px 11px 38px;
+  border: 2px solid #e2e8f0;
+  border-radius: 10px;
+  font-size: 13px;
+  font-family: 'Noto Sans JP', 'Hiragino Sans', sans-serif;
+  background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.5'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E") no-repeat 12px center;
+  outline: none;
+  transition: border-color 0.15s;
+  margin-bottom: 10px;
+  color: #1e293b;
+}
+.drug-search:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
+.drug-search::placeholder { color: #94a3b8; }
+
+@keyframes fadeSlideIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.fade-in { animation: fadeSlideIn 0.22s ease; }
+
+@media print {
+  .no-print { display: none !important; }
+  body { background: #fff; }
+  #root > div { max-width: 100% !important; }
+}
 </style>
 </head>
 <body>
 <div id="root"></div>
 <script type="text/babel">
 const { useState, useRef } = React;
+
+// ─────────────────────────────────────────────────────────────
+// MASTER DATA
+// ─────────────────────────────────────────────────────────────
+
 const STEROIDS = [
   { id:"clobetasol",   name:"クロベタゾールプロピオン酸エステル",          brand:"デルモベート",      rank:"V",   conc:"0.05%"  },
   { id:"diflorasone",  name:"ジフロラゾン酢酸エステル",                    brand:"ダイアコート",       rank:"V",   conc:"0.05%"  },
@@ -41,18 +74,31 @@ const STEROIDS = [
   { id:"triamcinolone",name:"トリアムシノロンアセトニド",                  brand:"レダコート",        rank:"II",  conc:"0.1%"   },
   { id:"pred",         name:"プレドニゾロン",                             brand:"プレドニゾロン軟膏", rank:"I",   conc:"0.5%"   },
 ];
+
+// ratio: Feldmann & Maibach 1967 前腕比。null = 部位依存で範囲表示
 const SITES = [
-  { id:"eyelid",   label:"眼瞼（まぶた）",  ratio:42,   thin:true,  note:"眼合併症（緑内障・白内障）のリスク部位。眼囲の皮疹は早期コントロールが重要。重症例では眼科併診を推奨" },
-  { id:"scrotum",  label:"陰嚢・外陰部",    ratio:42,   thin:true,  note:"粘膜近傍で吸収率が極めて高い（前腕比42倍）。皮膚萎縮・全身吸収に最大限配慮" },
-  { id:"face",     label:"顔面（頬）",      ratio:13,   thin:true,  note:"皮膚菲薄で萎縮・酒さ様皮膚炎のリスク（前腕比13倍）。長期連用を避け、寛解後はカルシニューリン阻害薬等への切替を考慮" },
-  { id:"forehead", label:"額",             ratio:6,    thin:true,  note:"顔面部位（前腕比6倍）。皮膚菲薄部位として注意" },
-  { id:"axilla",   label:"腋窩・間擦部",    ratio:null, thin:true,  note:"間擦部は皮膚面の接触による密閉効果で吸収率が大幅に上昇（Maibach 1971で前腕比4〜7倍と報告）。皮膚萎縮・全身吸収に配慮" },
-  { id:"scalp",    label:"頭皮",           ratio:3.5,  thin:false, note:"前腕比3.5倍。有毛部のためローション・フォーム剤型が適する" },
-  { id:"back",     label:"背部",           ratio:1.7,  thin:false, note:"前腕比1.7倍。一般部位" },
-  { id:"forearm",  label:"前腕・体幹四肢",  ratio:1.0,  thin:false, note:"基準部位（参照値1.0）。通常の使用に問題なし" },
-  { id:"palm",     label:"手のひら",        ratio:0.83, thin:false, note:"前腕比0.83。角質層厚め、吸収率低め" },
-  { id:"sole",     label:"足底",           ratio:0.14, thin:false, note:"前腕比0.14。最も角質層が厚い。吸収率が非常に低く、効果も出にくいため高ランクが必要になることが多い" },
+  { id:"eyelid",  label:"眼瞼（まぶた）",    ratio:42,   rangeLabel:null,      thin:true,  note:"眼合併症（緑内障・白内障）のリスク部位。眼囲の皮疹は早期コントロールが重要。重症例では眼科併診を推奨" },
+  { id:"scrotum", label:"陰嚢・外陰部",      ratio:42,   rangeLabel:null,      thin:true,  note:"粘膜近傍で吸収率が極めて高い（前腕比42倍）。皮膚萎縮・全身吸収に最大限配慮" },
+  { id:"groin",   label:"鼠径部・会陰部",    ratio:null, rangeLabel:"10〜30×", thin:true,  note:"間擦部・粘膜近傍で吸収率が非常に高い（前腕比10〜30倍程度）。会陰・肛囲ではさらに上昇する可能性がある。皮膚萎縮・全身吸収に十分配慮し、強力ステロイドの長期使用は避ける" },
+  { id:"face",    label:"顔面（頬）",         ratio:13,   rangeLabel:null,      thin:true,  note:"皮膚菲薄で萎縮・酒さ様皮膚炎のリスク（前腕比13倍）。長期連用を避け、寛解後はカルシニューリン阻害薬等への切替を考慮" },
+  { id:"forehead",label:"額",               ratio:6,    rangeLabel:null,      thin:true,  note:"顔面部位（前腕比6倍）。皮膚菲薄部位として注意" },
+  { id:"ear",     label:"耳介・外耳道",       ratio:null, rangeLabel:"4〜6×",   thin:true,  note:"耳介は前腕比4〜6倍程度。外耳道内は閉鎖構造により密封効果が加わり実効吸収率がさらに高い。過剰使用による外耳道真菌症にも注意が必要" },
+  { id:"axilla",  label:"腋窩・間擦部",       ratio:null, rangeLabel:"4〜7×",   thin:true,  note:"間擦部は皮膚面の接触による密閉効果で吸収率が大幅に上昇（Maibach 1971で前腕比4〜7倍と報告）。皮膚萎縮・全身吸収に配慮" },
+  { id:"scalp",   label:"頭皮",             ratio:3.5,  rangeLabel:null,      thin:false, note:"前腕比3.5倍。有毛部のためローション・フォーム剤型が適する" },
+  { id:"back",    label:"背部",             ratio:1.7,  rangeLabel:null,      thin:false, note:"前腕比1.7倍。一般部位" },
+  { id:"forearm", label:"前腕・体幹四肢",    ratio:1.0,  rangeLabel:null,      thin:false, note:"基準部位（参照値1.0）。通常の使用に問題なし" },
+  { id:"palm",    label:"手のひら",          ratio:0.83, rangeLabel:null,      thin:false, note:"前腕比0.83。角質層厚め、吸収率低め" },
+  { id:"sole",    label:"足底",             ratio:0.14, rangeLabel:null,      thin:false, note:"前腕比0.14。最も角質層が厚い。吸収率が非常に低く、効果も出にくいため高ランクが必要になることが多い" },
 ];
+
+const FORMULATIONS = [
+  { id:"ointment", label:"軟膏",      icon:"🟤" },
+  { id:"cream",    label:"クリーム",  icon:"🟡" },
+  { id:"lotion",   label:"ローション",icon:"🔵" },
+  { id:"foam",     label:"フォーム",  icon:"⚪" },
+  { id:"tape",     label:"テープ",    icon:"🔴" },
+];
+
 const RANK_ORDER = ["I","II","III","IV","V"];
 const RANK_META = {
   V:   { label:"最強",        color:"#7c1a1a", light:"#fef2f2", accent:"#dc2626", groupName:"Strongest（I群）" },
@@ -61,183 +107,747 @@ const RANK_META = {
   II:  { label:"Medium",      color:"#065f46", light:"#f0fdf4", accent:"#059669", groupName:"Medium（IV群）" },
   I:   { label:"Weak",        color:"#374151", light:"#f9fafb", accent:"#6b7280", groupName:"Weak（V群）" },
 };
+
 const INFLAMMATION_LEVELS = [
-  { id:"mild", label:"軽症", icon:"🟡", desc:"乾燥および軽度の紅斑・鱗屑を主体",
-    judge:(rankIdx)=>{
-      if(rankIdx<=1) return{status:"first",reason:"ガイドライン準拠の第一選択ランクです（軽症：ミディアム以下）"};
-      if(rankIdx===2) return{status:"caution",reason:"軽症に対してストロング（III群）はガイドラインの第一選択より一段強いランクです"};
-      return{status:"deviation",reason:"軽症に対するベリーストロング以上は、ガイドラインの推奨範囲を明確に超えています"};
-    }},
-  { id:"moderate", label:"中等症", icon:"🟠", desc:"中等度までの紅斑・鱗屑、少数の丘疹、搔破痕を主体",
-    judge:(rankIdx)=>{
-      if(rankIdx===1||rankIdx===2) return{status:"first",reason:"ガイドライン準拠の第一選択ランクです（中等症：ストロング〜ミディアム）"};
-      if(rankIdx===0) return{status:"caution",reason:"中等症に対してウィーク（V群）は効果不十分の可能性。ガイドラインの第一選択（ストロング〜ミディアム）に届きません"};
-      if(rankIdx===3) return{status:"caution",reason:"中等症に対してベリーストロングは第一選択より一段強いランクです。寛解後は速やかにランクダウンを"};
-      return{status:"deviation",reason:"中等症に対するストロンゲスト（I群）は、ガイドライン上は重症例で第一選択が無効な場合の限定使用とされています"};
-    }},
-  { id:"severe", label:"重症", icon:"🔴", desc:"急性・進行性の高度炎症病変、苔癬化、紅斑・丘疹の多発、多数の搔破痕、痒疹結節など",
-    judge:(rankIdx)=>{
-      if(rankIdx===3) return{status:"first",reason:"ガイドライン準拠の第一選択ランクです（重症：ベリーストロング）"};
-      if(rankIdx===4) return{status:"first",reason:"ガイドラインでは『ベリーストロングで十分な効果が得られない場合、その部位に限定してストロンゲストを使用』と記載。該当する場合は適正です"};
-      if(rankIdx===2) return{status:"caution",reason:"重症に対してストロングは第一選択より一段弱いランク。効果不十分の可能性。ガイドラインは『重症度に見合わない弱いランクを選ばないこと』を明示しています"};
-      return{status:"deviation",reason:"重症に対してミディアム以下は、ガイドラインの推奨範囲を明確に下回ります"};
-    }},
+  {
+    id:"mild", label:"軽症", icon:"🟡",
+    desc:"乾燥および軽度の紅斑・鱗屑を主体",
+    judge:(rankIdx) => {
+      if (rankIdx <= 1) return { status:"first",     reason:"ガイドライン準拠の第一選択ランクです（軽症：ミディアム以下）" };
+      if (rankIdx === 2) return { status:"caution",   reason:"軽症に対してストロング（III群）はガイドラインの第一選択より一段強いランクです" };
+      return { status:"deviation", reason:"軽症に対するベリーストロング以上は、ガイドラインの推奨範囲を明確に超えています" };
+    }
+  },
+  {
+    id:"moderate", label:"中等症", icon:"🟠",
+    desc:"中等度までの紅斑・鱗屑、少数の丘疹、搔破痕を主体",
+    judge:(rankIdx) => {
+      if (rankIdx === 1 || rankIdx === 2) return { status:"first",     reason:"ガイドライン準拠の第一選択ランクです（中等症：ストロング〜ミディアム）" };
+      if (rankIdx === 0)                  return { status:"caution",   reason:"中等症に対してウィーク（V群）は効果不十分の可能性。ガイドラインの第一選択（ストロング〜ミディアム）に届きません" };
+      if (rankIdx === 3)                  return { status:"caution",   reason:"中等症に対してベリーストロングは第一選択より一段強いランクです。寛解後は速やかにランクダウンを" };
+      return { status:"deviation", reason:"中等症に対するストロンゲスト（I群）は、ガイドライン上は重症例で第一選択が無効な場合の限定使用とされています" };
+    }
+  },
+  {
+    id:"severe", label:"重症", icon:"🔴",
+    desc:"急性・進行性の高度炎症病変、苔癬化、紅斑・丘疹の多発、多数の搔破痕、痒疹結節など",
+    judge:(rankIdx) => {
+      if (rankIdx === 3) return { status:"first",   reason:"ガイドライン準拠の第一選択ランクです（重症：ベリーストロング）" };
+      if (rankIdx === 4) return { status:"first",   reason:"ガイドラインでは『ベリーストロングで十分な効果が得られない場合、その部位に限定してストロンゲストを使用』と記載。該当する場合は適正です" };
+      if (rankIdx === 2) return { status:"caution", reason:"重症に対してストロングは第一選択より一段弱いランク。効果不十分の可能性。ガイドラインは『重症度に見合わない弱いランクを選ばないこと』を明示しています" };
+      return { status:"deviation", reason:"重症に対してミディアム以下は、ガイドラインの推奨範囲を明確に下回ります" };
+    }
+  },
 ];
-function evaluate({drug,site,age,area,duration,inflammation}){
-  const findings=[];
-  const rankIdx=RANK_ORDER.indexOf(drug.rank);
-  if(inflammation){
-    const inf=INFLAMMATION_LEVELS.find(l=>l.id===inflammation);
-    const judge=inf.judge(rankIdx);
-    findings.push({type:judge.status==="first"?"ok":judge.status==="caution"?"caution":"deviation",title:`【重症度×ランク】${inf.label}に${RANK_META[drug.rank].groupName}`,detail:judge.reason,source:"アトピー性皮膚炎診療ガイドライン2024・薬物療法"});
+
+// 1 FTU ≒ 0.5g（人差し指の先端〜第一関節分）
+const FTU_GUIDE = [
+  { site:"顔・頸部",      adult:"2.5g（5 FTU）",  child:"1.25g（2.5 FTU）" },
+  { site:"前腕（片側）",  adult:"2g（4 FTU）",    child:"1g（2 FTU）"       },
+  { site:"手（両手）",    adult:"1g（2 FTU）",    child:"0.5g（1 FTU）"     },
+  { site:"体幹（前面）",  adult:"7g（14 FTU）",   child:"3.5g（7 FTU）"     },
+  { site:"足（片側）",    adult:"3g（6 FTU）",    child:"1.5g（3 FTU）"     },
+];
+
+// ─────────────────────────────────────────────────────────────
+// EVALUATION ENGINE
+// ─────────────────────────────────────────────────────────────
+
+function evaluate({ drug, site, age, area, duration, inflammation, formulation, isPregnant }) {
+  const findings = [];
+  const rankIdx = RANK_ORDER.indexOf(drug.rank);
+
+  // 1. 重症度 × ランク
+  if (inflammation) {
+    const inf = INFLAMMATION_LEVELS.find(l => l.id === inflammation);
+    const judge = inf.judge(rankIdx);
+    findings.push({
+      type: judge.status === "first" ? "ok" : judge.status === "caution" ? "caution" : "deviation",
+      title: `【重症度×ランク】${inf.label}に${RANK_META[drug.rank].groupName}`,
+      detail: judge.reason,
+      source: "アトピー性皮膚炎診療ガイドライン2024・薬物療法",
+    });
   }
-  if(site.thin){
-    if(site.id==="eyelid"){
-      findings.push({type:"caution",title:"【部位】眼瞼への外用",detail:"ガイドラインは眼囲皮疹の早期コントロールを重視する一方、眼合併症（白内障・緑内障）のリスク管理を強調。カルシニューリン阻害薬（タクロリムス軟膏）は眼周囲にも安全に使用可能とされており、寛解後はこちらへの切替が推奨されます",source:"GL2024・眼合併症の項"});
-    } else if(rankIdx>=3){
-      findings.push({type:"caution",title:`【部位】${site.label}への強力ステロイド`,detail:"ガイドラインは『年齢・部位でランクを下げる必要はない』としつつも、皮膚菲薄部位では局所副作用（皮膚萎縮・毛細血管拡張・酒さ様皮膚炎）への配慮を明示。寛解導入後は速やかなランクダウンまたは非ステロイド外用薬への切替を検討",source:"GL2024・ステロイド外用薬の副作用"});
+
+  // 2. 部位
+  if (site.thin) {
+    if (site.id === "eyelid") {
+      findings.push({
+        type: "caution",
+        title: "【部位】眼瞼への外用",
+        detail: "ガイドラインは眼囲皮疹の早期コントロールを重視する一方、眼合併症（白内障・緑内障）のリスク管理を強調。カルシニューリン阻害薬（タクロリムス軟膏）は眼周囲にも安全に使用可能とされており、寛解後はこちらへの切替が推奨されます",
+        source: "GL2024・眼合併症の項",
+      });
+    } else if (rankIdx >= 3) {
+      findings.push({
+        type: "caution",
+        title: `【部位】${site.label}への強力ステロイド`,
+        detail: "ガイドラインは『年齢・部位でランクを下げる必要はない』としつつも、皮膚菲薄部位では局所副作用（皮膚萎縮・毛細血管拡張・酒さ様皮膚炎）への配慮を明示。寛解導入後は速やかなランクダウンまたは非ステロイド外用薬への切替を検討",
+        source: "GL2024・ステロイド外用薬の副作用",
+      });
     } else {
-      findings.push({type:"info",title:`【部位】${site.label}の特性`,detail:site.note,source:"部位別吸収率：Feldmann & Maibach 1967"});
+      findings.push({
+        type: "info",
+        title: `【部位】${site.label}の特性`,
+        detail: site.note,
+        source: "部位別吸収率：Feldmann & Maibach 1967",
+      });
     }
   }
-  if(age==="infant"||age==="child"){
-    if(rankIdx>=3){
-      findings.push({type:"info",title:"【年齢】乳幼児・小児への強力ステロイド",detail:"ガイドラインは『年齢によってランクを下げる必要はないが、短期間で効果が出やすいので使用期間に注意する』としています。重症度に見合ったランク選択が基本ですが、寛解導入後は速やかにランクダウン／非ステロイドへの切替を",source:"GL2024・小児への使用"});
-    } else {
-      findings.push({type:"ok",title:"【年齢】乳幼児・小児への使用",detail:"皮疹の重症度に見合ったランク選択であれば、年齢によるランクダウンは不要（ガイドライン準拠）",source:"GL2024"});
+
+  // 3. 年齢
+  if (age === "infant" || age === "child") {
+    findings.push(rankIdx >= 3 ? {
+      type: "info",
+      title: "【年齢】乳幼児・小児への強力ステロイド",
+      detail: "ガイドラインは『年齢によってランクを下げる必要はないが、短期間で効果が出やすいので使用期間に注意する』としています。重症度に見合ったランク選択が基本ですが、寛解導入後は速やかにランクダウン／非ステロイドへの切替を",
+      source: "GL2024・小児への使用",
+    } : {
+      type: "ok",
+      title: "【年齢】乳幼児・小児への使用",
+      detail: "皮疹の重症度に見合ったランク選択であれば、年齢によるランクダウンは不要（ガイドライン準拠）",
+      source: "GL2024",
+    });
+  } else if (age === "elderly") {
+    findings.push({
+      type: "info",
+      title: "【年齢】高齢者への配慮",
+      detail: "加齢性の皮膚菲薄化により局所副作用が顕在化しやすい。効果評価を密に行い、寛解後のランクダウンを計画的に",
+      source: "一般的臨床原則",
+    });
+  }
+
+  // 4. 使用期間
+  if (duration === "long") {
+    findings.push({
+      type: "caution",
+      title: "【期間】長期連用（4週超）",
+      detail: "ガイドラインはステロイド外用薬の長期連用による局所副作用を明示。炎症が落ち着いたら1日2回→1日1回へ減量し、寛解維持期はプロアクティブ療法（カルシニューリン阻害薬・デルゴシチニブ軟膏・ジファミラスト軟膏など非ステロイド系）への切替が推奨されます",
+      source: "GL2024・プロアクティブ療法",
+    });
+  } else if (duration === "medium") {
+    findings.push({
+      type: "info",
+      title: "【期間】中期使用（2〜4週）",
+      detail: "急性期は1日2回外用、炎症が落ち着いたら1日1回に減量するのが原則。効果を評価しつつ寛解維持療法への移行を計画",
+      source: "GL2024・外用回数",
+    });
+  }
+
+  // 5. 使用面積
+  if (area === "wide" && rankIdx >= 3) {
+    findings.push({
+      type: "caution",
+      title: "【面積】広範囲への強力ステロイド",
+      detail: "体表面積の広い範囲へのベリーストロング〜ストロンゲスト連用では全身吸収によるHPA軸抑制の報告あり。ガイドラインは具体的な面積閾値は示していませんが、寛解導入を目指し、達成後は速やかにダウングレードを",
+      source: "一般的臨床原則",
+    });
+  }
+
+  // 6. 剤型
+  if (formulation === "tape") {
+    const isHighRisk = site.thin || rankIdx >= 3 || area === "wide";
+    findings.push({
+      type: isHighRisk ? "deviation" : "caution",
+      title: "【剤型】テープ製剤（密封療法）",
+      detail: site.thin
+        ? `テープ製剤の完全遮閉（ODT）効果で吸収率が著明に上昇します。${site.label}はもともと吸収率の高い部位であり、局所・全身副作用リスクが極めて高くなります。皮膚菲薄部位へのテープ使用は原則回避してください`
+        : "テープ製剤の完全遮閉（ODT）効果で吸収率が大幅に上昇します。苔癬化・肥厚性病変への短期使用に限定し、広範囲・長期使用は避けてください",
+      source: "一般的臨床原則・密封療法の注意事項",
+    });
+  } else if (formulation === "lotion" || formulation === "foam") {
+    if (site.id === "scalp") {
+      findings.push({
+        type: "ok",
+        title: `【剤型】${formulation === "lotion" ? "ローション" : "フォーム"}製剤 × 頭皮`,
+        detail: "頭皮・有毛部への外用ではローション/フォーム剤型が第一選択です。基剤が塗布しやすく患者アドヒアランスの向上が期待できます",
+        source: "GL2024・外用剤型の選択",
+      });
     }
-  } else if(age==="elderly"){
-    findings.push({type:"info",title:"【年齢】高齢者への配慮",detail:"加齢性の皮膚菲薄化により局所副作用が顕在化しやすい。効果評価を密に行い、寛解後のランクダウンを計画的に",source:"一般的臨床原則"});
+  } else if (formulation === "cream") {
+    if (site.id === "eyelid" || site.id === "face" || site.id === "forehead") {
+      findings.push({
+        type: "info",
+        title: "【剤型】クリーム製剤 × 顔面・眼囲",
+        detail: "クリームは軟膏より使用感が良く顔面・眼囲に使いやすいですが、防腐剤（パラベン類等）による接触皮膚炎に注意。刺激が問題になる場合は軟膏への変更を検討してください",
+        source: "一般的臨床原則",
+      });
+    }
   }
-  if(duration==="long"){
-    findings.push({type:"caution",title:"【期間】長期連用（4週超）",detail:"ガイドラインはステロイド外用薬の長期連用による局所副作用を明示。炎症が落ち着いたら1日2回→1日1回へ減量し、寛解維持期はプロアクティブ療法（カルシニューリン阻害薬・デルゴシチニブ軟膏・ジファミラスト軟膏など非ステロイド系）への切替が推奨されます",source:"GL2024・プロアクティブ療法"});
-  } else if(duration==="medium"){
-    findings.push({type:"info",title:"【期間】中期使用（2〜4週）",detail:"急性期は1日2回外用、炎症が落ち着いたら1日1回に減量するのが原則。効果を評価しつつ寛解維持療法への移行を計画",source:"GL2024・外用回数"});
+
+  // 7. 妊婦・授乳婦
+  if (isPregnant) {
+    const highPotencyWideOrLong = rankIdx >= 3 && (area === "wide" || duration === "long");
+    findings.push(highPotencyWideOrLong ? {
+      type: "caution",
+      title: "【妊婦・授乳婦】強力ステロイドの広範囲・長期使用",
+      detail: "妊娠中に強力ステロイドを広範囲・長期使用した場合、胎児発育への影響が動物実験で報告されています。ヒトでの局所外用は一般的に安全域とされますが、必要最小限の範囲・期間に限定し、産婦人科医との連携を推奨します。授乳中は乳頭・乳輪への使用は授乳前に除去してください",
+      source: "ADPGL2024・妊娠中の薬物療法、各薬剤添付文書",
+    } : {
+      type: "info",
+      title: "【妊婦・授乳婦】外用ステロイドの使用",
+      detail: "適切な部位・面積・期間での外用ステロイドは妊娠中・授乳中も使用可能とされています。強力〜最強ランクの広範囲・長期使用は避けることが推奨されます。授乳中は乳頭・乳輪への使用に際し、授乳前に薬剤を除去してください",
+      source: "ADPGL2024・妊娠・授乳中の薬物療法",
+    });
   }
-  if(area==="wide"&&rankIdx>=3){
-    findings.push({type:"caution",title:"【面積】広範囲への強力ステロイド",detail:"体表面積の広い範囲へのベリーストロング〜ストロンゲスト連用では全身吸収によるHPA軸抑制の報告あり。ガイドラインは具体的な面積閾値は示していませんが、寛解導入を目指し、達成後は速やかにダウングレードを",source:"一般的臨床原則"});
-  }
-  const deviations=findings.filter(f=>f.type==="deviation").length;
-  const cautions=findings.filter(f=>f.type==="caution").length;
+
+  // 総合判定
+  const deviations = findings.filter(f => f.type === "deviation").length;
+  const cautions   = findings.filter(f => f.type === "caution").length;
   let verdict;
-  if(deviations>0) verdict={label:"ガイドライン逸脱",color:"#991b1b",bg:"#fef2f2",icon:"🚫",summary:"推奨範囲を明確に外れる選択が含まれます。処方意図の再確認を推奨します。"};
-  else if(cautions>=2) verdict={label:"要注意",color:"#b45309",bg:"#fff7ed",icon:"⚠️",summary:"複数の注意事項があります。短期限定使用・密な経過観察を前提に。"};
-  else if(cautions===1) verdict={label:"条件付き適合",color:"#92400e",bg:"#fef3c7",icon:"⚠️",summary:"1点の注意事項があります。注記を確認のうえ使用してください。"};
-  else verdict={label:"ガイドライン準拠",color:"#166534",bg:"#dcfce7",icon:"✅",summary:"アトピー性皮膚炎診療ガイドライン2024の推奨と整合しています。"};
-  const inflammationComparison=INFLAMMATION_LEVELS.map(inf=>{const j=inf.judge(rankIdx);return{id:inf.id,label:inf.label,icon:inf.icon,desc:inf.desc,status:j.status,reason:j.reason,isSelected:inf.id===inflammation};});
-  return{verdict,findings,inflammationComparison};
+  if      (deviations > 0) verdict = { label:"ガイドライン逸脱", color:"#991b1b", bg:"#fef2f2", icon:"🚫", summary:"推奨範囲を明確に外れる選択が含まれます。処方意図の再確認を推奨します。" };
+  else if (cautions >= 2)  verdict = { label:"要注意",           color:"#b45309", bg:"#fff7ed", icon:"⚠️", summary:"複数の注意事項があります。短期限定使用・密な経過観察を前提に。" };
+  else if (cautions === 1) verdict = { label:"条件付き適合",      color:"#92400e", bg:"#fef3c7", icon:"⚠️", summary:"1点の注意事項があります。注記を確認のうえ使用してください。" };
+  else                     verdict = { label:"ガイドライン準拠",  color:"#166534", bg:"#dcfce7", icon:"✅", summary:"アトピー性皮膚炎診療ガイドライン2024の推奨と整合しています。" };
+
+  const inflammationComparison = INFLAMMATION_LEVELS.map(inf => {
+    const j = inf.judge(rankIdx);
+    return { id:inf.id, label:inf.label, icon:inf.icon, desc:inf.desc, status:j.status, reason:j.reason, isSelected: inf.id === inflammation };
+  });
+
+  return { verdict, findings, inflammationComparison };
 }
-function StepBar({current}){
-  const labels=["薬剤","部位","患者","判定"];
-  return(<div style={{display:"flex",alignItems:"center"}}>{labels.map((l,i)=>(<div key={i} style={{display:"flex",alignItems:"center",flex:i<labels.length-1?1:"none"}}><div style={{width:24,height:24,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,flexShrink:0,background:i<current?"#2563eb":i===current?"#fff":"rgba(255,255,255,0.2)",color:i<current?"#fff":i===current?"#1e3a5f":"rgba(255,255,255,0.5)",boxShadow:i===current?"0 0 0 3px rgba(255,255,255,0.3)":"none"}}>{i<current?"✓":i+1}</div><div style={{fontSize:10,marginLeft:3,fontWeight:i===current?700:400,color:i<=current?"#fff":"rgba(255,255,255,0.4)",marginRight:3}}>{l}</div>{i<labels.length-1&&<div style={{flex:1,height:2,borderRadius:2,background:i<current?"#60a5fa":"rgba(255,255,255,0.2)"}}/>}</div>))}</div>);
-}
-function SectionHeader({step,title,done,dimmed}){
-  return(<div style={{display:"flex",alignItems:"center",gap:10,margin:"20px 0 10px",opacity:dimmed?0.4:1}}><div style={{width:26,height:26,borderRadius:"50%",background:done?"#2563eb":dimmed?"#e2e8f0":"#1e3a5f",color:"#fff",fontWeight:800,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{done?"✓":step}</div><div style={{fontSize:13,fontWeight:700,color:dimmed?"#94a3b8":"#1e293b"}}>{title}</div>{done&&<div style={{fontSize:10,color:"#2563eb",fontWeight:700}}>完了</div>}</div>);
-}
-function SubLabel({children}){return <div style={{fontSize:11,fontWeight:700,color:"#64748b",marginBottom:7,letterSpacing:"0.05em"}}>{children}</div>;}
-function ChoiceBtn({active,onClick,children}){return(<button onClick={onClick} style={{padding:"10px 6px",border:`2px solid ${active?"#2563eb":"#e2e8f0"}`,borderRadius:10,background:active?"#eff6ff":"#fff",cursor:"pointer",fontFamily:"inherit",textAlign:"center",display:"flex",flexDirection:"column",alignItems:"center"}}>{children}</button>);}
-function PlaceholderBox({children}){return(<div style={{textAlign:"center",padding:"16px",fontSize:12,color:"#cbd5e1",background:"#f8fafc",borderRadius:12,border:"1px dashed #e2e8f0",marginBottom:8}}>{children}</div>);}
-function Chip({color,children}){return(<div style={{background:`${color}18`,color,border:`1px solid ${color}44`,borderRadius:20,padding:"3px 9px",fontSize:11,fontWeight:600,display:"inline-flex",alignItems:"center"}}>{children}</div>);}
-function SelectedSummary({drug,site,age,area,duration,inflammation}){
-  const ageL={infant:"乳幼児",child:"小児",adult:"成人",elderly:"高齢者"};
-  const areaL={small:"狭い",medium:"中程度",wide:"広い"};
-  const durL={short:"短期（〜2週）",medium:"中期（2〜4週）",long:"長期（4週超）"};
-  const infL={mild:"軽症",moderate:"中等症",severe:"重症"};
-  const ratioLabel=site?(site.ratio!=null?`×${site.ratio}`:"4〜7×"):"";
-  return(<div style={{background:"#f8fafc",borderRadius:12,padding:"11px 13px",marginBottom:14,border:"1px solid #e2e8f0"}}><div style={{fontSize:10,fontWeight:700,color:"#94a3b8",marginBottom:7}}>選択内容</div><div style={{display:"flex",flexWrap:"wrap",gap:5}}>{drug&&<Chip color={RANK_META[drug.rank].color}>{drug.brand}（{RANK_META[drug.rank].groupName}）</Chip>}{site&&<Chip color="#0369a1">{site.label}（{ratioLabel}）</Chip>}{age&&<Chip color="#6b21a8">{ageL[age]}</Chip>}{area&&<Chip color="#065f46">{areaL[area]}</Chip>}{duration&&<Chip color="#9a3412">{durL[duration]}</Chip>}{inflammation&&<Chip color="#be185d">{infL[inflammation]}</Chip>}</div></div>);
-}
-function SteroidChecker(){
-  const [selDrug,setSelDrug]=useState(null);
-  const [selSite,setSelSite]=useState(null);
-  const [age,setAge]=useState(null);
-  const [area,setArea]=useState(null);
-  const [duration,setDuration]=useState(null);
-  const [inflammation,setInflammation]=useState(null);
-  const [result,setResult]=useState(null);
-  const [rankFilter,setRankFilter]=useState("ALL");
-  const siteRef=useRef(null);
-  const patientRef=useRef(null);
-  const resultRef=useRef(null);
-  const scrollTo=(ref)=>setTimeout(()=>ref.current?.scrollIntoView({behavior:"smooth",block:"start"}),80);
-  const pickDrug=(drug)=>{setSelDrug(drug);setSelSite(null);setAge(null);setArea(null);setDuration(null);setInflammation(null);setResult(null);scrollTo(siteRef);};
-  const pickSite=(site)=>{setSelSite(site);setAge(null);setArea(null);setDuration(null);setInflammation(null);setResult(null);scrollTo(patientRef);};
-  const tryEval=(drug,site,a,ar,dur,inf)=>{if(!drug||!site||!a||!ar||!dur)return;const r=evaluate({drug,site,age:a,area:ar,duration:dur,inflammation:inf||null});setResult(r);scrollTo(resultRef);};
-  const pickAge=(v)=>{setAge(v);tryEval(selDrug,selSite,v,area,duration,inflammation);};
-  const pickArea=(v)=>{setArea(v);tryEval(selDrug,selSite,age,v,duration,inflammation);};
-  const pickDuration=(v)=>{setDuration(v);tryEval(selDrug,selSite,age,area,v,inflammation);};
-  const pickInflammation=(v)=>{const n=inflammation===v?null:v;setInflammation(n);if(result||(age&&area&&duration))tryEval(selDrug,selSite,age,area,duration,n);};
-  const reset=()=>{setSelDrug(null);setSelSite(null);setAge(null);setArea(null);setDuration(null);setInflammation(null);setResult(null);setRankFilter("ALL");window.scrollTo({top:0,behavior:"smooth"});};
-  const filteredDrugs=rankFilter==="ALL"?STEROIDS:STEROIDS.filter(d=>d.rank===rankFilter);
-  const currentStep=result?3:selSite?2:selDrug?1:0;
-  return(
-    <div style={{fontFamily:"'Noto Sans JP','Hiragino Sans',sans-serif",background:"#f1f5f9",minHeight:"100vh",maxWidth:480,margin:"0 auto"}}>
-      <div style={{background:"linear-gradient(135deg,#0f2942 0%,#1e3a5f 100%)",padding:"16px 14px 12px",position:"sticky",top:0,zIndex:100,boxShadow:"0 2px 16px rgba(0,0,0,0.3)"}}>
-        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
-          <div style={{background:"rgba(255,255,255,0.12)",borderRadius:10,padding:"6px 10px",fontSize:20}}>🩺</div>
-          <div style={{flex:1}}>
-            <div style={{color:"#fff",fontWeight:700,fontSize:15}}>外用ステロイド 適正チェッカー</div>
-            <div style={{color:"rgba(255,255,255,0.55)",fontSize:10}}>アトピー性皮膚炎診療ガイドライン 2024 準拠 ver.7</div>
+
+// ─────────────────────────────────────────────────────────────
+// SHARED UI COMPONENTS
+// ─────────────────────────────────────────────────────────────
+
+function StepBar({ current }) {
+  const labels = ["薬剤", "部位", "患者", "判定"];
+  return (
+    <div style={{ display:"flex", alignItems:"center" }}>
+      {labels.map((l, i) => (
+        <div key={i} style={{ display:"flex", alignItems:"center", flex: i < labels.length - 1 ? 1 : "none" }}>
+          <div style={{
+            width:26, height:26, borderRadius:"50%",
+            display:"flex", alignItems:"center", justifyContent:"center",
+            fontSize:12, fontWeight:700, flexShrink:0,
+            background: i < current ? "#2563eb" : i === current ? "#fff" : "rgba(255,255,255,0.2)",
+            color:      i < current ? "#fff"    : i === current ? "#1e3a5f" : "rgba(255,255,255,0.5)",
+            boxShadow:  i === current ? "0 0 0 3px rgba(255,255,255,0.3)" : "none",
+          }}>
+            {i < current ? "✓" : i + 1}
           </div>
-          {selDrug&&<button onClick={reset} style={{background:"rgba(255,255,255,0.12)",border:"none",borderRadius:8,padding:"5px 10px",color:"rgba(255,255,255,0.8)",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>やり直す</button>}
+          <div style={{ fontSize:11, margin:"0 4px", fontWeight: i === current ? 700 : 400, color: i <= current ? "#fff" : "rgba(255,255,255,0.4)" }}>
+            {l}
+          </div>
+          {i < labels.length - 1 && (
+            <div style={{ flex:1, height:2, borderRadius:2, background: i < current ? "#60a5fa" : "rgba(255,255,255,0.2)" }}/>
+          )}
         </div>
-        <StepBar current={currentStep}/>
+      ))}
+    </div>
+  );
+}
+
+function SectionHeader({ step, title, done, dimmed }) {
+  return (
+    <div style={{ display:"flex", alignItems:"center", gap:10, margin:"20px 0 10px", opacity: dimmed ? 0.4 : 1 }}>
+      <div style={{
+        width:28, height:28, borderRadius:"50%", flexShrink:0,
+        background: done ? "#2563eb" : dimmed ? "#e2e8f0" : "#1e3a5f",
+        color:"#fff", fontWeight:800, fontSize:13,
+        display:"flex", alignItems:"center", justifyContent:"center",
+      }}>
+        {done ? "✓" : step}
       </div>
-      <div style={{padding:"14px 13px 80px"}}>
-        <SectionHeader step={1} title="使用する薬剤を選択" done={!!selDrug}/>
-        <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:10}}>
-          {["ALL","V","IV","III","II","I"].map(r=>{const m=r!=="ALL"?RANK_META[r]:null;const active=rankFilter===r;return(<button key={r} onClick={()=>setRankFilter(r)} style={{padding:"4px 11px",borderRadius:20,border:"none",fontSize:11,fontWeight:active?700:400,background:active?(m?m.color:"#1e3a5f"):"#e2e8f0",color:active?"#fff":"#64748b",cursor:"pointer",fontFamily:"inherit"}}>{r==="ALL"?"全て":`ランク${r}`}</button>);})}
-        </div>
-        {filteredDrugs.map(drug=>{const m=RANK_META[drug.rank];const sel=selDrug?.id===drug.id;return(<button key={drug.id} onClick={()=>pickDrug(drug)} style={{width:"100%",display:"flex",alignItems:"center",gap:11,background:sel?m.light:"#fff",border:`2px solid ${sel?m.accent:"transparent"}`,borderRadius:12,padding:"10px 13px",marginBottom:7,cursor:"pointer",fontFamily:"inherit",textAlign:"left",boxShadow:sel?`0 0 0 2px ${m.accent}33`:"0 1px 3px rgba(0,0,0,0.06)"}}><div style={{background:m.color,color:"#fff",fontWeight:800,fontSize:11,width:26,height:26,borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{drug.rank}</div><div style={{flex:1}}><div style={{fontSize:12,fontWeight:600,color:"#1e293b",lineHeight:1.4}}>{drug.name}</div><div style={{fontSize:11,color:"#64748b"}}>{drug.brand}　{drug.conc}</div></div>{sel&&<div style={{color:m.accent,fontSize:16,fontWeight:700}}>✓</div>}</button>);})}
-        <div ref={siteRef} style={{scrollMarginTop:90}}><SectionHeader step={2} title="塗布部位を選択" done={!!selSite} dimmed={!selDrug}/></div>
-        {selDrug?SITES.map(site=>{const sel=selSite?.id===site.id;const hasRatio=site.ratio!=null;const rc=!hasRatio?"#64748b":site.ratio>=30?"#dc2626":site.ratio>=10?"#f97316":site.ratio>=3?"#f59e0b":site.ratio>=1?"#3b82f6":"#64748b";return(<button key={site.id} onClick={()=>pickSite(site)} style={{width:"100%",display:"flex",alignItems:"center",gap:12,background:sel?"#eff6ff":"#fff",border:`2px solid ${sel?"#2563eb":"transparent"}`,borderRadius:12,padding:"10px 13px",marginBottom:7,cursor:"pointer",fontFamily:"inherit",textAlign:"left",boxShadow:sel?"0 0 0 2px #93c5fd33":"0 1px 3px rgba(0,0,0,0.06)"}}><div style={{flex:1}}><div style={{fontSize:13,fontWeight:600,color:"#1e293b",marginBottom:4}}>{site.label}{site.thin&&<span style={{marginLeft:6,fontSize:9,background:"#fef2f2",color:"#dc2626",padding:"1px 6px",borderRadius:4,fontWeight:700}}>皮膚菲薄部位</span>}</div><div style={{display:"flex",alignItems:"center",gap:8}}><div style={{flex:1,background:"#f1f5f9",borderRadius:4,height:6,overflow:"hidden"}}><div style={{width:hasRatio?`${Math.min(100,(site.ratio/46)*100)}%`:"50%",height:"100%",borderRadius:4,background:`linear-gradient(90deg,${rc}88,${rc})`,opacity:hasRatio?1:0.5}}/></div><div style={{fontSize:11,fontWeight:700,color:rc,minWidth:34,textAlign:"right"}}>{hasRatio?`×${site.ratio}`:"4〜7×"}</div></div></div>{sel&&<div style={{color:"#2563eb",fontSize:16,fontWeight:700}}>✓</div>}</button>);}): <PlaceholderBox>薬剤を選択すると部位選択が表示されます</PlaceholderBox>}
-        <div ref={patientRef} style={{scrollMarginTop:90}}><SectionHeader step={3} title="患者属性を選択" done={!!(age&&area&&duration)} dimmed={!selSite}/></div>
-        {selSite?(<div>
-          <SubLabel>年齢区分</SubLabel>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:7,marginBottom:14}}>
-            {[{v:"infant",l:"乳幼児",sub:"〜2歳",icon:"👶"},{v:"child",l:"小児",sub:"3〜15歳",icon:"🧒"},{v:"adult",l:"成人",sub:"16〜64歳",icon:"🧑"},{v:"elderly",l:"高齢者",sub:"65歳〜",icon:"👴"}].map(o=>(<ChoiceBtn key={o.v} active={age===o.v} onClick={()=>pickAge(o.v)}><div style={{fontSize:20}}>{o.icon}</div><div style={{fontSize:11,fontWeight:700,color:"#1e293b",marginTop:3}}>{o.l}</div><div style={{fontSize:9,color:"#94a3b8"}}>{o.sub}</div></ChoiceBtn>))}
-          </div>
-          <SubLabel>使用面積</SubLabel>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:7,marginBottom:14}}>
-            {[{v:"small",l:"狭い",sub:"手のひら数枚",icon:"✋"},{v:"medium",l:"中程度",sub:"一部位",icon:"🦵"},{v:"wide",l:"広い",sub:"10%超",icon:"🧍"}].map(o=>(<ChoiceBtn key={o.v} active={area===o.v} onClick={()=>pickArea(o.v)}><div style={{fontSize:20}}>{o.icon}</div><div style={{fontSize:11,fontWeight:700,color:"#1e293b",marginTop:3}}>{o.l}</div><div style={{fontSize:9,color:"#94a3b8"}}>{o.sub}</div></ChoiceBtn>))}
-          </div>
-          <SubLabel>使用期間</SubLabel>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:7,marginBottom:6}}>
-            {[{v:"short",l:"短期",sub:"〜2週間",icon:"📅"},{v:"medium",l:"中期",sub:"2〜4週",icon:"🗓"},{v:"long",l:"長期",sub:"4週超",icon:"📆"}].map(o=>(<ChoiceBtn key={o.v} active={duration===o.v} onClick={()=>pickDuration(o.v)}><div style={{fontSize:20}}>{o.icon}</div><div style={{fontSize:11,fontWeight:700,color:"#1e293b",marginTop:3}}>{o.l}</div><div style={{fontSize:9,color:"#94a3b8"}}>{o.sub}</div></ChoiceBtn>))}
-          </div>
-          {(!age||!area||!duration)&&<div style={{textAlign:"center",fontSize:11,color:"#94a3b8",padding:"8px",marginTop:4}}>3項目すべて選択すると自動で判定します</div>}
-        </div>):<PlaceholderBox>部位を選択すると患者属性の入力欄が表示されます</PlaceholderBox>}
-        <div ref={resultRef} style={{scrollMarginTop:90}}><SectionHeader step={4} title="判定結果" done={!!result} dimmed={!result}/></div>
-        {result?(<div>
-          <div style={{background:result.verdict.bg,border:`2px solid ${result.verdict.color}55`,borderRadius:16,padding:"18px 16px",marginBottom:14,textAlign:"center"}}>
-            <div style={{fontSize:36,marginBottom:6}}>{result.verdict.icon}</div>
-            <div style={{fontSize:20,fontWeight:800,color:result.verdict.color,letterSpacing:"0.03em",marginBottom:6}}>{result.verdict.label}</div>
-            <div style={{fontSize:11,color:result.verdict.color,lineHeight:1.6,maxWidth:320,margin:"0 auto"}}>{result.verdict.summary}</div>
-          </div>
-          <div style={{background:"#fff",border:"1px solid #e2e8f0",borderRadius:14,padding:"14px",marginBottom:14,boxShadow:"0 1px 6px rgba(0,0,0,0.06)"}}>
-            <div style={{fontSize:12,fontWeight:700,color:"#1e293b",marginBottom:3}}>🔥 皮疹の重症度別・ガイドライン適合性</div>
-            <div style={{fontSize:10,color:"#94a3b8",marginBottom:10,lineHeight:1.5}}>選択薬（{selDrug&&RANK_META[selDrug.rank].groupName}）を<br/>各重症度に使った場合の評価。タップで判定に反映されます</div>
-            {result.inflammationComparison.map((inf)=>{const pal={first:{color:"#166534",bg:"#dcfce7",label:"第一選択",icon:"✅"},caution:{color:"#b45309",bg:"#fef3c7",label:"注意",icon:"⚠️"},deviation:{color:"#991b1b",bg:"#fee2e2",label:"逸脱",icon:"🚫"}}[inf.status];const isActive=inf.isSelected;return(<button key={inf.id} onClick={()=>pickInflammation(inf.id)} style={{width:"100%",display:"block",textAlign:"left",background:isActive?"#f0f9ff":pal.bg+"80",border:`2px solid ${isActive?"#2563eb":"transparent"}`,borderRadius:12,padding:"11px 12px",marginBottom:8,cursor:"pointer",fontFamily:"inherit"}}><div style={{display:"flex",alignItems:"center",gap:8,marginBottom:isActive?6:0}}><span style={{fontSize:16}}>{inf.icon}</span><div style={{flex:1}}><div style={{fontSize:13,fontWeight:700,color:"#1e293b"}}>{inf.label}</div><div style={{fontSize:10,color:"#64748b",lineHeight:1.4,marginTop:2}}>{inf.desc}</div></div><div style={{fontSize:10,fontWeight:700,color:"#fff",background:pal.color,padding:"3px 10px",borderRadius:20,flexShrink:0,whiteSpace:"nowrap"}}>{pal.icon} {pal.label}</div></div>{isActive&&<div style={{marginTop:8,fontSize:11,color:"#0369a1",background:"#e0f2fe",borderRadius:7,padding:"8px 10px",lineHeight:1.6}}>💬 {inf.reason}</div>}</button>);})}
-            <div style={{display:"flex",gap:10,flexWrap:"wrap",marginTop:2,padding:"6px 2px 0",borderTop:"1px solid #f1f5f9"}}>
-              {[{color:"#166534",label:"第一選択"},{color:"#b45309",label:"注意"},{color:"#991b1b",label:"逸脱"}].map(l=>(<div key={l.label} style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:"#64748b",paddingTop:6}}><div style={{width:9,height:9,borderRadius:2,background:l.color}}/>{l.label}</div>))}
-            </div>
-          </div>
-          <SelectedSummary drug={selDrug} site={selSite} age={age} area={area} duration={duration} inflammation={inflammation}/>
-          <div style={{marginBottom:12}}>
-            <SubLabel>📋 詳細所見（ガイドライン参照）</SubLabel>
-            {result.findings.map((f,i)=>{const pal={ok:{color:"#166534",bg:"#f0fdf4",border:"#86efac",icon:"✅"},caution:{color:"#92400e",bg:"#fff7ed",border:"#fcd34d",icon:"⚠️"},deviation:{color:"#991b1b",bg:"#fef2f2",border:"#fca5a5",icon:"🚫"},info:{color:"#0369a1",bg:"#f0f9ff",border:"#bae6fd",icon:"ℹ️"}}[f.type];return(<div key={i} style={{background:pal.bg,border:`1px solid ${pal.border}`,borderRadius:10,padding:"12px 14px",marginBottom:8,borderLeft:`4px solid ${pal.color}`}}><div style={{fontSize:13,fontWeight:700,color:pal.color,marginBottom:5,lineHeight:1.4}}>{pal.icon} {f.title}</div><div style={{fontSize:12,color:"#475569",lineHeight:1.7,marginBottom:6}}>{f.detail}</div><div style={{fontSize:10,color:"#94a3b8",fontStyle:"italic",paddingTop:5,borderTop:"1px dashed #e2e8f0"}}>📖 出典：{f.source}</div></div>);})}
-          </div>
-          <div style={{background:"#f0f9ff",border:"1px solid #bae6fd",borderRadius:10,padding:"11px 13px",marginBottom:12,fontSize:11,color:"#075985",lineHeight:1.7}}>
-            📚 <strong>主たる参照ガイドライン</strong><br/>日本皮膚科学会・日本アレルギー学会　アトピー性皮膚炎診療ガイドライン策定委員会<br/><em>「アトピー性皮膚炎診療ガイドライン2024」</em>（日皮会誌 134(11), 2741-2843, 2024）
-          </div>
-          <div style={{background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:10,padding:"10px 14px",marginBottom:16,fontSize:10,color:"#94a3b8",lineHeight:1.7}}>
-            ※ 本ツールはアトピー性皮膚炎診療ガイドライン2024の推奨事項を参考情報として整理したものです。他疾患（乾癬・接触皮膚炎・慢性湿疹等）にはそれぞれ異なる推奨があり、本ツールの判定はあくまで薬剤師業務の参考情報です。最終的な処方・服薬指導判断は個別症例の詳細と添付文書・最新のガイドラインに基づく専門的判断によるものとします。
-          </div>
-          <button onClick={reset} style={{width:"100%",padding:"13px",border:"none",borderRadius:12,background:"linear-gradient(135deg,#1e3a5f,#2563eb)",color:"#fff",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit",boxShadow:"0 4px 12px rgba(37,99,235,0.3)"}}>もう一度チェックする</button>
-        </div>):<PlaceholderBox>患者属性を選択すると判定結果が表示されます</PlaceholderBox>}
+      <div style={{ fontSize:14, fontWeight:700, color: dimmed ? "#94a3b8" : "#1e293b", flex:1 }}>{title}</div>
+      {done && <div style={{ fontSize:11, color:"#2563eb", fontWeight:700 }}>完了</div>}
+    </div>
+  );
+}
+
+function SubLabel({ children }) {
+  return <div style={{ fontSize:12, fontWeight:700, color:"#64748b", marginBottom:8, letterSpacing:"0.05em" }}>{children}</div>;
+}
+
+function ChoiceBtn({ active, onClick, ariaLabel, children }) {
+  return (
+    <button
+      onClick={onClick}
+      aria-pressed={active}
+      aria-label={ariaLabel}
+      style={{
+        padding:"12px 6px", minHeight:76,
+        border:`2px solid ${active ? "#2563eb" : "#e2e8f0"}`,
+        borderRadius:10,
+        background: active ? "#eff6ff" : "#fff",
+        cursor:"pointer", fontFamily:"inherit",
+        textAlign:"center", display:"flex", flexDirection:"column", alignItems:"center",
+        transition:"border-color 0.12s, background 0.12s",
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function PlaceholderBox({ children }) {
+  return (
+    <div style={{ textAlign:"center", padding:"16px", fontSize:13, color:"#cbd5e1", background:"#f8fafc", borderRadius:12, border:"1px dashed #e2e8f0", marginBottom:8 }}>
+      {children}
+    </div>
+  );
+}
+
+function Chip({ color, children }) {
+  return (
+    <div style={{ background:`${color}18`, color, border:`1px solid ${color}44`, borderRadius:20, padding:"3px 9px", fontSize:11, fontWeight:600, display:"inline-flex", alignItems:"center" }}>
+      {children}
+    </div>
+  );
+}
+
+function SelectedSummary({ drug, site, age, area, duration, inflammation, formulation, isPregnant }) {
+  const ageL  = { infant:"乳幼児", child:"小児", adult:"成人", elderly:"高齢者" };
+  const areaL = { small:"狭い", medium:"中程度", wide:"広い" };
+  const durL  = { short:"短期（〜2週）", medium:"中期（2〜4週）", long:"長期（4週超）" };
+  const infL  = { mild:"軽症", moderate:"中等症", severe:"重症" };
+  const formL = { ointment:"軟膏", cream:"クリーム", lotion:"ローション", foam:"フォーム", tape:"テープ" };
+  const ratioLabel = site ? (site.ratio != null ? `×${site.ratio}` : site.rangeLabel || "?") : "";
+  return (
+    <div style={{ background:"#f8fafc", borderRadius:12, padding:"11px 13px", marginBottom:14, border:"1px solid #e2e8f0" }}>
+      <div style={{ fontSize:11, fontWeight:700, color:"#94a3b8", marginBottom:7 }}>選択内容</div>
+      <div style={{ display:"flex", flexWrap:"wrap", gap:5 }}>
+        {drug       && <Chip color={RANK_META[drug.rank].color}>{drug.brand}（{RANK_META[drug.rank].groupName}）</Chip>}
+        {site       && <Chip color="#0369a1">{site.label}（{ratioLabel}）</Chip>}
+        {formulation && <Chip color="#7c3aed">{formL[formulation]}</Chip>}
+        {age        && <Chip color="#6b21a8">{ageL[age]}</Chip>}
+        {isPregnant && <Chip color="#db2777">妊婦・授乳婦</Chip>}
+        {area       && <Chip color="#065f46">{areaL[area]}</Chip>}
+        {duration   && <Chip color="#9a3412">{durL[duration]}</Chip>}
+        {inflammation && <Chip color="#be185d">{infL[inflammation]}</Chip>}
       </div>
     </div>
   );
 }
+
+// ─────────────────────────────────────────────────────────────
+// MAIN APP
+// ─────────────────────────────────────────────────────────────
+
+function SteroidChecker() {
+  const [selDrug,     setSelDrug]     = useState(null);
+  const [selSite,     setSelSite]     = useState(null);
+  const [age,         setAge]         = useState(null);
+  const [area,        setArea]        = useState(null);
+  const [duration,    setDuration]    = useState(null);
+  const [inflammation,setInflammation]= useState(null);
+  const [formulation, setFormulation] = useState(null);
+  const [isPregnant,  setIsPregnant]  = useState(false);
+  const [result,      setResult]      = useState(null);
+  const [rankFilter,  setRankFilter]  = useState("ALL");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showFtu,     setShowFtu]     = useState(false);
+
+  const siteRef   = useRef(null);
+  const patientRef = useRef(null);
+  const resultRef  = useRef(null);
+
+  const scrollTo = (ref) => setTimeout(() => ref.current?.scrollIntoView({ behavior:"smooth", block:"start" }), 80);
+
+  const tryEval = (drug, site, a, ar, dur, inf, form, preg) => {
+    if (!drug || !site || !a || !ar || !dur) return;
+    setResult(evaluate({ drug, site, age:a, area:ar, duration:dur, inflammation:inf||null, formulation:form||null, isPregnant:!!preg }));
+    scrollTo(resultRef);
+  };
+
+  const pickDrug = (drug) => {
+    setSelDrug(drug);
+    setSelSite(null); setAge(null); setArea(null); setDuration(null);
+    setInflammation(null); setFormulation(null); setIsPregnant(false);
+    setResult(null);
+    scrollTo(siteRef);
+  };
+  const pickSite = (site) => {
+    setSelSite(site);
+    setAge(null); setArea(null); setDuration(null);
+    setInflammation(null); setFormulation(null); setIsPregnant(false);
+    setResult(null);
+    scrollTo(patientRef);
+  };
+
+  const pickAge      = (v) => { setAge(v);       tryEval(selDrug, selSite, v,   area,     duration,    inflammation, formulation, isPregnant); };
+  const pickArea     = (v) => { setArea(v);      tryEval(selDrug, selSite, age, v,        duration,    inflammation, formulation, isPregnant); };
+  const pickDuration = (v) => { setDuration(v);  tryEval(selDrug, selSite, age, area,     v,           inflammation, formulation, isPregnant); };
+  const pickForm     = (v) => { const n = formulation === v ? null : v; setFormulation(n); tryEval(selDrug, selSite, age, area, duration, inflammation, n, isPregnant); };
+  const pickPregnant = (v) => { setIsPregnant(v); tryEval(selDrug, selSite, age, area, duration, inflammation, formulation, v); };
+  const pickInflammation = (v) => {
+    const n = inflammation === v ? null : v;
+    setInflammation(n);
+    if (result || (age && area && duration)) tryEval(selDrug, selSite, age, area, duration, n, formulation, isPregnant);
+  };
+
+  const reset = () => {
+    setSelDrug(null); setSelSite(null); setAge(null); setArea(null); setDuration(null);
+    setInflammation(null); setFormulation(null); setIsPregnant(false);
+    setResult(null); setRankFilter("ALL"); setSearchQuery(""); setShowFtu(false);
+    window.scrollTo({ top:0, behavior:"smooth" });
+  };
+
+  const filteredDrugs = STEROIDS.filter(d => {
+    const matchRank = rankFilter === "ALL" || d.rank === rankFilter;
+    const q = searchQuery.trim().toLowerCase();
+    const matchSearch = !q || d.name.toLowerCase().includes(q) || d.brand.toLowerCase().includes(q);
+    return matchRank && matchSearch;
+  });
+
+  const currentStep = result ? 3 : selSite ? 2 : selDrug ? 1 : 0;
+
+  // ── JSX ──
+  return (
+    <div style={{ fontFamily:"'Noto Sans JP','Hiragino Sans',sans-serif", background:"#f1f5f9", minHeight:"100vh", maxWidth:480, margin:"0 auto" }}>
+
+      {/* ═══ HEADER ═══ */}
+      <div className="no-print" style={{ background:"linear-gradient(135deg,#0f2942 0%,#1e3a5f 100%)", padding:"16px 14px 12px", position:"sticky", top:0, zIndex:100, boxShadow:"0 2px 16px rgba(0,0,0,0.3)" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:8 }}>
+          <div style={{ background:"rgba(255,255,255,0.12)", borderRadius:10, padding:"6px 10px", fontSize:20 }}>🩺</div>
+          <div style={{ flex:1 }}>
+            <div style={{ color:"#fff", fontWeight:700, fontSize:15 }}>外用ステロイド 適正チェッカー</div>
+            <div style={{ color:"rgba(255,255,255,0.55)", fontSize:11 }}>アトピー性皮膚炎診療ガイドライン 2024 準拠 ver.8</div>
+          </div>
+          {selDrug && (
+            <button onClick={reset} aria-label="最初からやり直す" style={{ background:"rgba(255,255,255,0.12)", border:"none", borderRadius:8, padding:"7px 12px", color:"rgba(255,255,255,0.85)", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
+              やり直す
+            </button>
+          )}
+        </div>
+        <StepBar current={currentStep}/>
+      </div>
+
+      {/* ═══ BODY ═══ */}
+      <div style={{ padding:"14px 13px 80px" }}>
+
+        {/* ── STEP 1: DRUG ── */}
+        <SectionHeader step={1} title="使用する薬剤を選択" done={!!selDrug}/>
+
+        {/* Rank filter */}
+        <div style={{ display:"flex", gap:5, flexWrap:"wrap", marginBottom:8 }}>
+          {["ALL","V","IV","III","II","I"].map(r => {
+            const m = r !== "ALL" ? RANK_META[r] : null;
+            const active = rankFilter === r;
+            return (
+              <button key={r} onClick={() => setRankFilter(r)} aria-pressed={active} style={{ padding:"5px 12px", minHeight:32, borderRadius:20, border:"none", fontSize:12, fontWeight: active ? 700 : 400, background: active ? (m ? m.color : "#1e3a5f") : "#e2e8f0", color: active ? "#fff" : "#64748b", cursor:"pointer", fontFamily:"inherit" }}>
+                {r === "ALL" ? "全て" : `ランク${r}`}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Drug search */}
+        <input
+          className="drug-search"
+          type="search"
+          placeholder="一般名・商品名で検索（例：デルモベート、クロベタゾール）"
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+          aria-label="薬剤名で検索"
+        />
+
+        {filteredDrugs.length === 0
+          ? <PlaceholderBox>「{searchQuery}」に一致する薬剤が見つかりません</PlaceholderBox>
+          : filteredDrugs.map(drug => {
+              const m = RANK_META[drug.rank];
+              const sel = selDrug?.id === drug.id;
+              return (
+                <button key={drug.id} onClick={() => pickDrug(drug)} aria-pressed={sel} style={{ width:"100%", display:"flex", alignItems:"center", gap:11, background: sel ? m.light : "#fff", border:`2px solid ${sel ? m.accent : "transparent"}`, borderRadius:12, padding:"12px 13px", marginBottom:7, cursor:"pointer", fontFamily:"inherit", textAlign:"left", boxShadow: sel ? `0 0 0 2px ${m.accent}33` : "0 1px 3px rgba(0,0,0,0.06)" }}>
+                  <div style={{ background:m.color, color:"#fff", fontWeight:800, fontSize:12, width:28, height:28, borderRadius:6, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                    {drug.rank}
+                  </div>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontSize:13, fontWeight:600, color:"#1e293b", lineHeight:1.4 }}>{drug.name}</div>
+                    <div style={{ fontSize:12, color:"#64748b" }}>{drug.brand}　{drug.conc}</div>
+                  </div>
+                  {sel && <div style={{ color:m.accent, fontSize:18, fontWeight:700 }}>✓</div>}
+                </button>
+              );
+            })
+        }
+
+        {/* ── STEP 2: SITE ── */}
+        <div ref={siteRef} style={{ scrollMarginTop:90 }}>
+          <SectionHeader step={2} title="塗布部位を選択" done={!!selSite} dimmed={!selDrug}/>
+        </div>
+
+        {selDrug ? SITES.map(site => {
+          const sel = selSite?.id === site.id;
+          const hasRatio = site.ratio != null;
+          const dispValue = hasRatio ? site.ratio : 20; // 棒グラフ用の代替値
+          const rc = !hasRatio ? "#94a3b8"
+            : site.ratio >= 30 ? "#dc2626"
+            : site.ratio >= 10 ? "#f97316"
+            : site.ratio >= 3  ? "#f59e0b"
+            : site.ratio >= 1  ? "#3b82f6"
+            : "#64748b";
+          return (
+            <button key={site.id} onClick={() => pickSite(site)} aria-pressed={sel} style={{ width:"100%", display:"flex", alignItems:"center", gap:12, background: sel ? "#eff6ff" : "#fff", border:`2px solid ${sel ? "#2563eb" : "transparent"}`, borderRadius:12, padding:"12px 13px", marginBottom:7, cursor:"pointer", fontFamily:"inherit", textAlign:"left", boxShadow: sel ? "0 0 0 2px #93c5fd33" : "0 1px 3px rgba(0,0,0,0.06)" }}>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:13, fontWeight:600, color:"#1e293b", marginBottom:5 }}>
+                  {site.label}
+                  {site.thin && <span style={{ marginLeft:6, fontSize:10, background:"#fef2f2", color:"#dc2626", padding:"2px 7px", borderRadius:4, fontWeight:700 }}>皮膚菲薄部位</span>}
+                </div>
+                <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                  <div style={{ flex:1, background:"#f1f5f9", borderRadius:4, height:6, overflow:"hidden" }}>
+                    <div style={{ width:`${Math.min(100, (dispValue / 46) * 100)}%`, height:"100%", borderRadius:4, background:`linear-gradient(90deg,${rc}88,${rc})`, opacity: hasRatio ? 1 : 0.55 }}/>
+                  </div>
+                  <div style={{ fontSize:12, fontWeight:700, color:rc, minWidth:44, textAlign:"right" }}>
+                    {hasRatio ? `×${site.ratio}` : (site.rangeLabel || "4〜7×")}
+                  </div>
+                </div>
+              </div>
+              {sel && <div style={{ color:"#2563eb", fontSize:18, fontWeight:700 }}>✓</div>}
+            </button>
+          );
+        }) : <PlaceholderBox>薬剤を選択すると部位選択が表示されます</PlaceholderBox>}
+
+        {/* ── STEP 3: PATIENT & CONDITIONS ── */}
+        <div ref={patientRef} style={{ scrollMarginTop:90 }}>
+          <SectionHeader step={3} title="患者属性・使用条件を選択" done={!!(age && area && duration)} dimmed={!selSite}/>
+        </div>
+
+        {selSite ? (
+          <div>
+            {/* 年齢区分 */}
+            <SubLabel>年齢区分</SubLabel>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:7, marginBottom:16 }}>
+              {[
+                { v:"infant",  l:"乳幼児", sub:"〜2歳",    icon:"👶" },
+                { v:"child",   l:"小児",   sub:"3〜15歳",  icon:"🧒" },
+                { v:"adult",   l:"成人",   sub:"16〜64歳", icon:"🧑" },
+                { v:"elderly", l:"高齢者", sub:"65歳〜",   icon:"👴" },
+              ].map(o => (
+                <ChoiceBtn key={o.v} active={age === o.v} onClick={() => pickAge(o.v)} ariaLabel={o.l}>
+                  <div style={{ fontSize:22 }}>{o.icon}</div>
+                  <div style={{ fontSize:12, fontWeight:700, color:"#1e293b", marginTop:3 }}>{o.l}</div>
+                  <div style={{ fontSize:10, color:"#94a3b8" }}>{o.sub}</div>
+                </ChoiceBtn>
+              ))}
+            </div>
+
+            {/* 妊婦・授乳婦 */}
+            <SubLabel>妊婦・授乳婦</SubLabel>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:7, marginBottom:16 }}>
+              {[
+                { v:false, l:"非該当",      icon:"—" },
+                { v:true,  l:"妊婦・授乳婦", icon:"🤱" },
+              ].map(o => (
+                <ChoiceBtn key={String(o.v)} active={isPregnant === o.v} onClick={() => pickPregnant(o.v)} ariaLabel={o.l}>
+                  <div style={{ fontSize:o.v ? 22 : 18, lineHeight:1.4, color: o.v ? undefined : "#94a3b8" }}>{o.icon}</div>
+                  <div style={{ fontSize:12, fontWeight:700, color:"#1e293b", marginTop:3 }}>{o.l}</div>
+                </ChoiceBtn>
+              ))}
+            </div>
+
+            {/* 使用面積 */}
+            <SubLabel>使用面積</SubLabel>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:7, marginBottom:16 }}>
+              {[
+                { v:"small",  l:"狭い",   sub:"手のひら数枚", icon:"✋" },
+                { v:"medium", l:"中程度", sub:"一部位",       icon:"🦵" },
+                { v:"wide",   l:"広い",   sub:"10%超",        icon:"🧍" },
+              ].map(o => (
+                <ChoiceBtn key={o.v} active={area === o.v} onClick={() => pickArea(o.v)} ariaLabel={o.l}>
+                  <div style={{ fontSize:22 }}>{o.icon}</div>
+                  <div style={{ fontSize:12, fontWeight:700, color:"#1e293b", marginTop:3 }}>{o.l}</div>
+                  <div style={{ fontSize:10, color:"#94a3b8" }}>{o.sub}</div>
+                </ChoiceBtn>
+              ))}
+            </div>
+
+            {/* 使用期間 */}
+            <SubLabel>使用期間</SubLabel>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:7, marginBottom:16 }}>
+              {[
+                { v:"short",  l:"短期", sub:"〜2週間", icon:"📅" },
+                { v:"medium", l:"中期", sub:"2〜4週",  icon:"🗓" },
+                { v:"long",   l:"長期", sub:"4週超",   icon:"📆" },
+              ].map(o => (
+                <ChoiceBtn key={o.v} active={duration === o.v} onClick={() => pickDuration(o.v)} ariaLabel={o.l}>
+                  <div style={{ fontSize:22 }}>{o.icon}</div>
+                  <div style={{ fontSize:12, fontWeight:700, color:"#1e293b", marginTop:3 }}>{o.l}</div>
+                  <div style={{ fontSize:10, color:"#94a3b8" }}>{o.sub}</div>
+                </ChoiceBtn>
+              ))}
+            </div>
+
+            {/* 剤型（任意） */}
+            <SubLabel>剤型 <span style={{ fontWeight:400, color:"#94a3b8", fontSize:11 }}>（任意・選択するとより詳細なチェックを実施）</span></SubLabel>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:6, marginBottom:16 }}>
+              {FORMULATIONS.map(f => (
+                <ChoiceBtn key={f.id} active={formulation === f.id} onClick={() => pickForm(f.id)} ariaLabel={f.label}>
+                  <div style={{ fontSize:18 }}>{f.icon}</div>
+                  <div style={{ fontSize:11, fontWeight:700, color:"#1e293b", marginTop:3, textAlign:"center", lineHeight:1.2 }}>{f.label}</div>
+                </ChoiceBtn>
+              ))}
+            </div>
+
+            {(!age || !area || !duration) && (
+              <div style={{ textAlign:"center", fontSize:12, color:"#94a3b8", padding:"8px", marginTop:4 }}>
+                年齢・面積・期間の3項目を選択すると自動で判定します
+              </div>
+            )}
+          </div>
+        ) : (
+          <PlaceholderBox>部位を選択すると患者属性の入力欄が表示されます</PlaceholderBox>
+        )}
+
+        {/* ── STEP 4: RESULT ── */}
+        <div ref={resultRef} style={{ scrollMarginTop:90 }}>
+          <SectionHeader step={4} title="判定結果" done={!!result} dimmed={!result}/>
+        </div>
+
+        {result ? (
+          <div className="fade-in">
+
+            {/* 総合判定バナー */}
+            <div style={{ background:result.verdict.bg, border:`2px solid ${result.verdict.color}55`, borderRadius:16, padding:"18px 16px", marginBottom:14, textAlign:"center" }}>
+              <div style={{ fontSize:40, marginBottom:6 }}>{result.verdict.icon}</div>
+              <div style={{ fontSize:22, fontWeight:800, color:result.verdict.color, letterSpacing:"0.03em", marginBottom:6 }}>{result.verdict.label}</div>
+              <div style={{ fontSize:12, color:result.verdict.color, lineHeight:1.7, maxWidth:320, margin:"0 auto" }}>{result.verdict.summary}</div>
+            </div>
+
+            {/* 重症度別適合性 */}
+            <div style={{ background:"#fff", border:"1px solid #e2e8f0", borderRadius:14, padding:"14px", marginBottom:14, boxShadow:"0 1px 6px rgba(0,0,0,0.06)" }}>
+              <div style={{ fontSize:13, fontWeight:700, color:"#1e293b", marginBottom:3 }}>🔥 皮疹の重症度別・ガイドライン適合性</div>
+              <div style={{ fontSize:11, color:"#94a3b8", marginBottom:10, lineHeight:1.5 }}>
+                選択薬（{selDrug && RANK_META[selDrug.rank].groupName}）を各重症度に使った場合の評価。タップで判定に反映されます
+              </div>
+              {result.inflammationComparison.map(inf => {
+                const pal = {
+                  first:     { color:"#166534", bg:"#dcfce7", label:"第一選択", icon:"✅" },
+                  caution:   { color:"#b45309", bg:"#fef3c7", label:"注意",     icon:"⚠️" },
+                  deviation: { color:"#991b1b", bg:"#fee2e2", label:"逸脱",     icon:"🚫" },
+                }[inf.status];
+                const isActive = inf.isSelected;
+                return (
+                  <button key={inf.id} onClick={() => pickInflammation(inf.id)} aria-pressed={isActive} style={{ width:"100%", display:"block", textAlign:"left", background: isActive ? "#f0f9ff" : pal.bg + "80", border:`2px solid ${isActive ? "#2563eb" : "transparent"}`, borderRadius:12, padding:"11px 12px", marginBottom:8, cursor:"pointer", fontFamily:"inherit" }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom: isActive ? 6 : 0 }}>
+                      <span style={{ fontSize:18 }}>{inf.icon}</span>
+                      <div style={{ flex:1 }}>
+                        <div style={{ fontSize:13, fontWeight:700, color:"#1e293b" }}>{inf.label}</div>
+                        <div style={{ fontSize:11, color:"#64748b", lineHeight:1.4, marginTop:2 }}>{inf.desc}</div>
+                      </div>
+                      <div style={{ fontSize:11, fontWeight:700, color:"#fff", background:pal.color, padding:"4px 11px", borderRadius:20, flexShrink:0, whiteSpace:"nowrap" }}>
+                        {pal.icon} {pal.label}
+                      </div>
+                    </div>
+                    {isActive && (
+                      <div style={{ marginTop:8, fontSize:12, color:"#0369a1", background:"#e0f2fe", borderRadius:7, padding:"8px 10px", lineHeight:1.6 }}>
+                        💬 {inf.reason}
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+              <div style={{ display:"flex", gap:12, flexWrap:"wrap", padding:"8px 2px 0", borderTop:"1px solid #f1f5f9" }}>
+                {[{ color:"#166534", label:"第一選択" }, { color:"#b45309", label:"注意" }, { color:"#991b1b", label:"逸脱" }].map(l => (
+                  <div key={l.label} style={{ display:"flex", alignItems:"center", gap:4, fontSize:11, color:"#64748b" }}>
+                    <div style={{ width:10, height:10, borderRadius:2, background:l.color }}/>
+                    {l.label}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* 選択内容サマリ */}
+            <SelectedSummary drug={selDrug} site={selSite} age={age} area={area} duration={duration} inflammation={inflammation} formulation={formulation} isPregnant={isPregnant}/>
+
+            {/* 詳細所見 */}
+            <div style={{ marginBottom:12 }}>
+              <SubLabel>📋 詳細所見（ガイドライン参照）</SubLabel>
+              {result.findings.map((f, i) => {
+                const pal = {
+                  ok:        { color:"#166534", bg:"#f0fdf4", border:"#86efac", icon:"✅" },
+                  caution:   { color:"#92400e", bg:"#fff7ed", border:"#fcd34d", icon:"⚠️" },
+                  deviation: { color:"#991b1b", bg:"#fef2f2", border:"#fca5a5", icon:"🚫" },
+                  info:      { color:"#0369a1", bg:"#f0f9ff", border:"#bae6fd", icon:"ℹ️" },
+                }[f.type];
+                return (
+                  <div key={i} style={{ background:pal.bg, border:`1px solid ${pal.border}`, borderRadius:10, padding:"13px 14px", marginBottom:8, borderLeft:`4px solid ${pal.color}` }}>
+                    <div style={{ fontSize:13, fontWeight:700, color:pal.color, marginBottom:6, lineHeight:1.4 }}>{pal.icon} {f.title}</div>
+                    <div style={{ fontSize:12, color:"#475569", lineHeight:1.8, marginBottom:6 }}>{f.detail}</div>
+                    <div style={{ fontSize:11, color:"#94a3b8", fontStyle:"italic", paddingTop:5, borderTop:"1px dashed #e2e8f0" }}>📖 出典：{f.source}</div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* FTU ガイド（折りたたみ） */}
+            <div style={{ background:"#fff", border:"1px solid #e2e8f0", borderRadius:12, marginBottom:12, overflow:"hidden" }}>
+              <button
+                onClick={() => setShowFtu(!showFtu)}
+                style={{ width:"100%", display:"flex", alignItems:"center", justifyContent:"space-between", padding:"13px 14px", background:"none", border:"none", cursor:"pointer", fontFamily:"inherit", textAlign:"left" }}
+                aria-expanded={showFtu}
+              >
+                <div style={{ fontSize:13, fontWeight:700, color:"#1e293b" }}>💊 FTU（フィンガーチップユニット）参考量</div>
+                <div style={{ fontSize:12, color:"#64748b" }}>{showFtu ? "▲ 閉じる" : "▼ 開く"}</div>
+              </button>
+              {showFtu && (
+                <div style={{ padding:"0 14px 14px" }}>
+                  <div style={{ fontSize:11, color:"#64748b", marginBottom:10, lineHeight:1.6 }}>
+                    1 FTU ≒ 0.5g（人差し指の先端〜第一関節まで絞り出した量）。1回外用量の目安です。
+                  </div>
+                  <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+                    <thead>
+                      <tr>
+                        <th style={{ textAlign:"left",  padding:"7px 8px", background:"#f8fafc", color:"#475569", fontWeight:700, borderBottom:"1px solid #e2e8f0" }}>部位</th>
+                        <th style={{ textAlign:"right", padding:"7px 8px", background:"#f8fafc", color:"#475569", fontWeight:700, borderBottom:"1px solid #e2e8f0" }}>成人</th>
+                        <th style={{ textAlign:"right", padding:"7px 8px", background:"#f8fafc", color:"#475569", fontWeight:700, borderBottom:"1px solid #e2e8f0" }}>小児</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {FTU_GUIDE.map((row, i) => (
+                        <tr key={i} style={{ borderBottom:"1px solid #f1f5f9" }}>
+                          <td style={{ padding:"7px 8px", color:"#1e293b" }}>{row.site}</td>
+                          <td style={{ padding:"7px 8px", color:"#475569", textAlign:"right" }}>{row.adult}</td>
+                          <td style={{ padding:"7px 8px", color:"#475569", textAlign:"right" }}>{row.child}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* 参照ガイドライン */}
+            <div style={{ background:"#f0f9ff", border:"1px solid #bae6fd", borderRadius:10, padding:"11px 13px", marginBottom:12, fontSize:12, color:"#075985", lineHeight:1.7 }}>
+              📚 <strong>主たる参照ガイドライン</strong><br/>
+              日本皮膚科学会・日本アレルギー学会　アトピー性皮膚炎診療ガイドライン策定委員会<br/>
+              <em>「アトピー性皮膚炎診療ガイドライン2024」</em>（日皮会誌 134(11), 2741-2843, 2024）
+            </div>
+
+            {/* 免責 */}
+            <div style={{ background:"#f8fafc", border:"1px solid #e2e8f0", borderRadius:10, padding:"10px 14px", marginBottom:16, fontSize:11, color:"#94a3b8", lineHeight:1.7 }}>
+              ※ 本ツールはアトピー性皮膚炎診療ガイドライン2024の推奨事項を参考情報として整理したものです。他疾患（乾癬・接触皮膚炎・慢性湿疹等）にはそれぞれ異なる推奨があり、本ツールの判定はあくまで薬剤師業務の参考情報です。最終的な処方・服薬指導判断は個別症例の詳細と添付文書・最新のガイドラインに基づく専門的判断によるものとします。
+            </div>
+
+            {/* アクション */}
+            <div style={{ display:"flex", gap:10, marginBottom:16 }} className="no-print">
+              <button
+                onClick={() => window.print()}
+                style={{ flex:1, padding:"13px", border:"2px solid #e2e8f0", borderRadius:12, background:"#fff", color:"#475569", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}
+                aria-label="結果を印刷またはPDF保存"
+              >
+                🖨 印刷・PDF保存
+              </button>
+              <button
+                onClick={reset}
+                style={{ flex:2, padding:"13px", border:"none", borderRadius:12, background:"linear-gradient(135deg,#1e3a5f,#2563eb)", color:"#fff", fontSize:14, fontWeight:700, cursor:"pointer", fontFamily:"inherit", boxShadow:"0 4px 12px rgba(37,99,235,0.3)" }}
+              >
+                もう一度チェックする
+              </button>
+            </div>
+
+          </div>
+        ) : (
+          <PlaceholderBox>患者属性を選択すると判定結果が表示されます</PlaceholderBox>
+        )}
+
+      </div>
+    </div>
+  );
+}
+
 ReactDOM.createRoot(document.getElementById('root')).render(<SteroidChecker/>);
 </script>
 </body>
