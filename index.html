@@ -46,7 +46,23 @@ button { font-family: 'Noto Sans JP', 'Hiragino Sans', sans-serif; }
 <body>
 <div id="root"></div>
 <script type="text/babel">
-const { useState, useRef } = React;
+const { useState, useRef, useEffect } = React;
+
+// ─────────────────────────────────────────────────────────────
+// UTILITIES
+// ─────────────────────────────────────────────────────────────
+
+// ひらがな → カタカナ変換（「でるも」→「デルモ」でマッチできるように）
+function hiraToKata(str) {
+  return str.replace(/[ぁ-ゖ]/g, c => String.fromCharCode(c.charCodeAt(0) + 0x60));
+}
+
+function matchesDrug(drug, query) {
+  if (!query) return true;
+  const q = hiraToKata(query.trim().toLowerCase());
+  const norm = s => hiraToKata(s.toLowerCase());
+  return norm(drug.name).includes(q) || norm(drug.brand).includes(q);
+}
 
 // ─────────────────────────────────────────────────────────────
 // MASTER DATA
@@ -437,12 +453,26 @@ function SteroidChecker() {
   const [isPregnant,  setIsPregnant]  = useState(false);
   const [result,      setResult]      = useState(null);
   const [rankFilter,  setRankFilter]  = useState("ALL");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [showFtu,     setShowFtu]     = useState(false);
+  const [searchQuery,    setSearchQuery]    = useState("");
+  const [showSuggestions,setShowSuggestions]= useState(false);
+  const [showFtu,        setShowFtu]        = useState(false);
 
-  const siteRef   = useRef(null);
-  const patientRef = useRef(null);
-  const resultRef  = useRef(null);
+  const siteRef      = useRef(null);
+  const patientRef   = useRef(null);
+  const resultRef    = useRef(null);
+  const searchWrapRef = useRef(null);
+
+  // サジェスト外クリックで閉じる
+  useEffect(() => {
+    if (!showSuggestions) return;
+    const handler = (e) => {
+      if (searchWrapRef.current && !searchWrapRef.current.contains(e.target)) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showSuggestions]);
 
   const scrollTo = (ref) => setTimeout(() => ref.current?.scrollIntoView({ behavior:"smooth", block:"start" }), 80);
 
@@ -457,6 +487,7 @@ function SteroidChecker() {
     setSelSite(null); setAge(null); setArea(null); setDuration(null);
     setInflammation(null); setFormulation(null); setIsPregnant(false);
     setResult(null);
+    setSearchQuery(""); setShowSuggestions(false);
     scrollTo(siteRef);
   };
   const pickSite = (site) => {
@@ -481,16 +512,19 @@ function SteroidChecker() {
   const reset = () => {
     setSelDrug(null); setSelSite(null); setAge(null); setArea(null); setDuration(null);
     setInflammation(null); setFormulation(null); setIsPregnant(false);
-    setResult(null); setRankFilter("ALL"); setSearchQuery(""); setShowFtu(false);
+    setResult(null); setRankFilter("ALL"); setSearchQuery(""); setShowSuggestions(false); setShowFtu(false);
     window.scrollTo({ top:0, behavior:"smooth" });
   };
 
   const filteredDrugs = STEROIDS.filter(d => {
     const matchRank = rankFilter === "ALL" || d.rank === rankFilter;
-    const q = searchQuery.trim().toLowerCase();
-    const matchSearch = !q || d.name.toLowerCase().includes(q) || d.brand.toLowerCase().includes(q);
-    return matchRank && matchSearch;
+    return matchRank && matchesDrug(d, searchQuery);
   });
+
+  // ランクフィルタを無視して全品目からサジェスト（2文字以上で表示）
+  const suggestions = searchQuery.length >= 2
+    ? STEROIDS.filter(d => matchesDrug(d, searchQuery)).slice(0, 8)
+    : [];
 
   const currentStep = result ? 3 : selSite ? 2 : selDrug ? 1 : 0;
 
@@ -534,15 +568,47 @@ function SteroidChecker() {
           })}
         </div>
 
-        {/* Drug search */}
-        <input
-          className="drug-search"
-          type="search"
-          placeholder="一般名・商品名で検索（例：デルモベート、クロベタゾール）"
-          value={searchQuery}
-          onChange={e => setSearchQuery(e.target.value)}
-          aria-label="薬剤名で検索"
-        />
+        {/* Drug search + suggest */}
+        <div ref={searchWrapRef} style={{ position:"relative", marginBottom:10 }}>
+          <input
+            className="drug-search"
+            style={{ marginBottom:0 }}
+            type="search"
+            placeholder="一般名・商品名で検索（ひらがな可：でるも → デルモベート）"
+            value={searchQuery}
+            onChange={e => { setSearchQuery(e.target.value); setShowSuggestions(true); }}
+            onFocus={() => { if (searchQuery.length >= 2) setShowSuggestions(true); }}
+            aria-label="薬剤名で検索"
+            aria-autocomplete="list"
+            aria-expanded={showSuggestions && suggestions.length > 0}
+            autoComplete="off"
+          />
+          {showSuggestions && suggestions.length > 0 && (
+            <div role="listbox" style={{ position:"absolute", top:"calc(100% + 4px)", left:0, right:0, background:"#fff", border:"2px solid #2563eb", borderRadius:12, boxShadow:"0 8px 24px rgba(0,0,0,0.12)", zIndex:200, overflow:"hidden" }}>
+              {suggestions.map(drug => {
+                const m = RANK_META[drug.rank];
+                return (
+                  <button
+                    key={drug.id}
+                    role="option"
+                    onMouseDown={e => { e.preventDefault(); pickDrug(drug); }}
+                    style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"10px 13px", background:"none", border:"none", borderBottom:"1px solid #f1f5f9", cursor:"pointer", fontFamily:"inherit", textAlign:"left" }}
+                    onMouseEnter={e => e.currentTarget.style.background = "#f0f9ff"}
+                    onMouseLeave={e => e.currentTarget.style.background = "none"}
+                  >
+                    <div style={{ background:m.color, color:"#fff", fontWeight:800, fontSize:11, width:24, height:24, borderRadius:5, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                      {drug.rank}
+                    </div>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontSize:13, fontWeight:700, color:"#1e293b" }}>{drug.brand}</div>
+                      <div style={{ fontSize:11, color:"#64748b", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{drug.name}</div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
 
         {filteredDrugs.length === 0
           ? <PlaceholderBox>「{searchQuery}」に一致する薬剤が見つかりません</PlaceholderBox>
