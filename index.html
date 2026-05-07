@@ -107,14 +107,6 @@ const SITES = [
   { id:"sole",    label:"足底",             ratio:0.14, rangeLabel:null,      thin:false, note:"前腕比0.14。最も角質層が厚い。吸収率が非常に低く、効果も出にくいため高ランクが必要になることが多い" },
 ];
 
-const FORMULATIONS = [
-  { id:"ointment", label:"軟膏",      icon:"🟤" },
-  { id:"cream",    label:"クリーム",  icon:"🟡" },
-  { id:"lotion",   label:"ローション",icon:"🔵" },
-  { id:"foam",     label:"フォーム",  icon:"⚪" },
-  { id:"tape",     label:"テープ",    icon:"🔴" },
-];
-
 const RANK_ORDER = ["I","II","III","IV","V"];
 const RANK_META = {
   V:   { label:"最強",        color:"#7c1a1a", light:"#fef2f2", accent:"#dc2626", groupName:"Strongest（I群）" },
@@ -169,7 +161,7 @@ const FTU_GUIDE = [
 // EVALUATION ENGINE
 // ─────────────────────────────────────────────────────────────
 
-function evaluate({ drug, site, age, area, duration, inflammation, formulation, isPregnant }) {
+function evaluate({ drug, site, age, area, duration, inflammation, isPregnant }) {
   const findings = [];
   const rankIdx = RANK_ORDER.indexOf(drug.rank);
 
@@ -260,38 +252,7 @@ function evaluate({ drug, site, age, area, duration, inflammation, formulation, 
     });
   }
 
-  // 6. 剤型
-  if (formulation === "tape") {
-    const isHighRisk = site.thin || rankIdx >= 3 || area === "wide";
-    findings.push({
-      type: isHighRisk ? "deviation" : "caution",
-      title: "【剤型】テープ製剤（密封療法）",
-      detail: site.thin
-        ? `テープ製剤の完全遮閉（ODT）効果で吸収率が著明に上昇します。${site.label}はもともと吸収率の高い部位であり、局所・全身副作用リスクが極めて高くなります。皮膚菲薄部位へのテープ使用は原則回避してください`
-        : "テープ製剤の完全遮閉（ODT）効果で吸収率が大幅に上昇します。苔癬化・肥厚性病変への短期使用に限定し、広範囲・長期使用は避けてください",
-      source: "一般的臨床原則・密封療法の注意事項",
-    });
-  } else if (formulation === "lotion" || formulation === "foam") {
-    if (site.id === "scalp") {
-      findings.push({
-        type: "ok",
-        title: `【剤型】${formulation === "lotion" ? "ローション" : "フォーム"}製剤 × 頭皮`,
-        detail: "頭皮・有毛部への外用ではローション/フォーム剤型が第一選択です。基剤が塗布しやすく患者アドヒアランスの向上が期待できます",
-        source: "GL2024・外用剤型の選択",
-      });
-    }
-  } else if (formulation === "cream") {
-    if (site.id === "eyelid" || site.id === "face" || site.id === "forehead") {
-      findings.push({
-        type: "info",
-        title: "【剤型】クリーム製剤 × 顔面・眼囲",
-        detail: "クリームは軟膏より使用感が良く顔面・眼囲に使いやすいですが、防腐剤（パラベン類等）による接触皮膚炎に注意。刺激が問題になる場合は軟膏への変更を検討してください",
-        source: "一般的臨床原則",
-      });
-    }
-  }
-
-  // 7. 妊婦・授乳婦
+  // 6. 妊婦・授乳婦
   if (isPregnant) {
     const highPotencyWideOrLong = rankIdx >= 3 && (area === "wide" || duration === "long");
     findings.push(highPotencyWideOrLong ? {
@@ -414,12 +375,11 @@ function Chip({ color, children }) {
   );
 }
 
-function SelectedSummary({ drug, site, age, area, duration, inflammation, formulation, isPregnant }) {
+function SelectedSummary({ drug, site, age, area, duration, inflammation, isPregnant }) {
   const ageL  = { infant:"乳幼児", child:"小児", adult:"成人", elderly:"高齢者" };
   const areaL = { small:"狭い", medium:"中程度", wide:"広い" };
   const durL  = { short:"短期（〜2週）", medium:"中期（2〜4週）", long:"長期（4週超）" };
   const infL  = { mild:"軽症", moderate:"中等症", severe:"重症" };
-  const formL = { ointment:"軟膏", cream:"クリーム", lotion:"ローション", foam:"フォーム", tape:"テープ" };
   const ratioLabel = site ? (site.ratio != null ? `×${site.ratio}` : site.rangeLabel || "?") : "";
   return (
     <div style={{ background:"#f8fafc", borderRadius:12, padding:"11px 13px", marginBottom:14, border:"1px solid #e2e8f0" }}>
@@ -427,7 +387,6 @@ function SelectedSummary({ drug, site, age, area, duration, inflammation, formul
       <div style={{ display:"flex", flexWrap:"wrap", gap:5 }}>
         {drug       && <Chip color={RANK_META[drug.rank].color}>{drug.brand}（{RANK_META[drug.rank].groupName}）</Chip>}
         {site       && <Chip color="#0369a1">{site.label}（{ratioLabel}）</Chip>}
-        {formulation && <Chip color="#7c3aed">{formL[formulation]}</Chip>}
         {age        && <Chip color="#6b21a8">{ageL[age]}</Chip>}
         {isPregnant && <Chip color="#db2777">妊婦・授乳婦</Chip>}
         {area       && <Chip color="#065f46">{areaL[area]}</Chip>}
@@ -449,7 +408,6 @@ function SteroidChecker() {
   const [area,        setArea]        = useState(null);
   const [duration,    setDuration]    = useState(null);
   const [inflammation,setInflammation]= useState(null);
-  const [formulation, setFormulation] = useState(null);
   const [isPregnant,  setIsPregnant]  = useState(false);
   const [result,      setResult]      = useState(null);
   const [rankFilter,  setRankFilter]  = useState("ALL");
@@ -476,16 +434,16 @@ function SteroidChecker() {
 
   const scrollTo = (ref) => setTimeout(() => ref.current?.scrollIntoView({ behavior:"smooth", block:"start" }), 80);
 
-  const tryEval = (drug, site, a, ar, dur, inf, form, preg) => {
+  const tryEval = (drug, site, a, ar, dur, inf, preg) => {
     if (!drug || !site || !a || !ar || !dur) return;
-    setResult(evaluate({ drug, site, age:a, area:ar, duration:dur, inflammation:inf||null, formulation:form||null, isPregnant:!!preg }));
+    setResult(evaluate({ drug, site, age:a, area:ar, duration:dur, inflammation:inf||null, isPregnant:!!preg }));
     scrollTo(resultRef);
   };
 
   const pickDrug = (drug) => {
     setSelDrug(drug);
     setSelSite(null); setAge(null); setArea(null); setDuration(null);
-    setInflammation(null); setFormulation(null); setIsPregnant(false);
+    setInflammation(null); setIsPregnant(false);
     setResult(null);
     setSearchQuery(""); setShowSuggestions(false);
     scrollTo(siteRef);
@@ -493,25 +451,24 @@ function SteroidChecker() {
   const pickSite = (site) => {
     setSelSite(site);
     setAge(null); setArea(null); setDuration(null);
-    setInflammation(null); setFormulation(null); setIsPregnant(false);
+    setInflammation(null); setIsPregnant(false);
     setResult(null);
     scrollTo(patientRef);
   };
 
-  const pickAge      = (v) => { setAge(v);       tryEval(selDrug, selSite, v,   area,     duration,    inflammation, formulation, isPregnant); };
-  const pickArea     = (v) => { setArea(v);      tryEval(selDrug, selSite, age, v,        duration,    inflammation, formulation, isPregnant); };
-  const pickDuration = (v) => { setDuration(v);  tryEval(selDrug, selSite, age, area,     v,           inflammation, formulation, isPregnant); };
-  const pickForm     = (v) => { const n = formulation === v ? null : v; setFormulation(n); tryEval(selDrug, selSite, age, area, duration, inflammation, n, isPregnant); };
-  const pickPregnant = (v) => { setIsPregnant(v); tryEval(selDrug, selSite, age, area, duration, inflammation, formulation, v); };
+  const pickAge      = (v) => { setAge(v);       tryEval(selDrug, selSite, v,   area,     duration,    inflammation, isPregnant); };
+  const pickArea     = (v) => { setArea(v);      tryEval(selDrug, selSite, age, v,        duration,    inflammation, isPregnant); };
+  const pickDuration = (v) => { setDuration(v);  tryEval(selDrug, selSite, age, area,     v,           inflammation, isPregnant); };
+  const pickPregnant = (v) => { setIsPregnant(v); tryEval(selDrug, selSite, age, area, duration, inflammation, v); };
   const pickInflammation = (v) => {
     const n = inflammation === v ? null : v;
     setInflammation(n);
-    if (result || (age && area && duration)) tryEval(selDrug, selSite, age, area, duration, n, formulation, isPregnant);
+    if (result || (age && area && duration)) tryEval(selDrug, selSite, age, area, duration, n, isPregnant);
   };
 
   const reset = () => {
     setSelDrug(null); setSelSite(null); setAge(null); setArea(null); setDuration(null);
-    setInflammation(null); setFormulation(null); setIsPregnant(false);
+    setInflammation(null); setIsPregnant(false);
     setResult(null); setRankFilter("ALL"); setSearchQuery(""); setShowSuggestions(false); setShowFtu(false);
     window.scrollTo({ top:0, behavior:"smooth" });
   };
@@ -736,17 +693,6 @@ function SteroidChecker() {
               ))}
             </div>
 
-            {/* 剤型（任意） */}
-            <SubLabel>剤型 <span style={{ fontWeight:400, color:"#94a3b8", fontSize:11 }}>（任意・選択するとより詳細なチェックを実施）</span></SubLabel>
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:6, marginBottom:16 }}>
-              {FORMULATIONS.map(f => (
-                <ChoiceBtn key={f.id} active={formulation === f.id} onClick={() => pickForm(f.id)} ariaLabel={f.label}>
-                  <div style={{ fontSize:18 }}>{f.icon}</div>
-                  <div style={{ fontSize:11, fontWeight:700, color:"#1e293b", marginTop:3, textAlign:"center", lineHeight:1.2 }}>{f.label}</div>
-                </ChoiceBtn>
-              ))}
-            </div>
-
             {(!age || !area || !duration) && (
               <div style={{ textAlign:"center", fontSize:12, color:"#94a3b8", padding:"8px", marginTop:4 }}>
                 年齢・面積・期間の3項目を選択すると自動で判定します
@@ -816,7 +762,7 @@ function SteroidChecker() {
             </div>
 
             {/* 選択内容サマリ */}
-            <SelectedSummary drug={selDrug} site={selSite} age={age} area={area} duration={duration} inflammation={inflammation} formulation={formulation} isPregnant={isPregnant}/>
+            <SelectedSummary drug={selDrug} site={selSite} age={age} area={area} duration={duration} inflammation={inflammation} isPregnant={isPregnant}/>
 
             {/* 詳細所見 */}
             <div style={{ marginBottom:12 }}>
