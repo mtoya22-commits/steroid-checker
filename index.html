@@ -9,6 +9,13 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="apple-touch-icon" sizes="180x180" href="icon-180.png">
+<link rel="apple-touch-icon" sizes="152x152" href="icon-152.png">
+<link rel="apple-touch-icon" sizes="120x120" href="icon-120.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ステロイドチェッカー">
+<meta name="theme-color" content="#1e3a5f">
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { background: #f1f5f9; font-family: 'Noto Sans JP', 'Hiragino Sans', sans-serif; }
@@ -46,7 +53,23 @@ button { font-family: 'Noto Sans JP', 'Hiragino Sans', sans-serif; }
 <body>
 <div id="root"></div>
 <script type="text/babel">
-const { useState, useRef } = React;
+const { useState, useRef, useEffect } = React;
+
+// ─────────────────────────────────────────────────────────────
+// UTILITIES
+// ─────────────────────────────────────────────────────────────
+
+// ひらがな → カタカナ変換（「でるも」→「デルモ」でマッチできるように）
+function hiraToKata(str) {
+  return str.replace(/[ぁ-ゖ]/g, c => String.fromCharCode(c.charCodeAt(0) + 0x60));
+}
+
+function matchesDrug(drug, query) {
+  if (!query) return true;
+  const q = hiraToKata(query.trim().toLowerCase());
+  const norm = s => hiraToKata(s.toLowerCase());
+  return norm(drug.name).includes(q) || norm(drug.brand).includes(q);
+}
 
 // ─────────────────────────────────────────────────────────────
 // MASTER DATA
@@ -89,14 +112,6 @@ const SITES = [
   { id:"forearm", label:"前腕・体幹四肢",    ratio:1.0,  rangeLabel:null,      thin:false, note:"基準部位（参照値1.0）。通常の使用に問題なし" },
   { id:"palm",    label:"手のひら",          ratio:0.83, rangeLabel:null,      thin:false, note:"前腕比0.83。角質層厚め、吸収率低め" },
   { id:"sole",    label:"足底",             ratio:0.14, rangeLabel:null,      thin:false, note:"前腕比0.14。最も角質層が厚い。吸収率が非常に低く、効果も出にくいため高ランクが必要になることが多い" },
-];
-
-const FORMULATIONS = [
-  { id:"ointment", label:"軟膏",      icon:"🟤" },
-  { id:"cream",    label:"クリーム",  icon:"🟡" },
-  { id:"lotion",   label:"ローション",icon:"🔵" },
-  { id:"foam",     label:"フォーム",  icon:"⚪" },
-  { id:"tape",     label:"テープ",    icon:"🔴" },
 ];
 
 const RANK_ORDER = ["I","II","III","IV","V"];
@@ -153,7 +168,7 @@ const FTU_GUIDE = [
 // EVALUATION ENGINE
 // ─────────────────────────────────────────────────────────────
 
-function evaluate({ drug, site, age, area, duration, inflammation, formulation, isPregnant }) {
+function evaluate({ drug, site, age, area, duration, inflammation, isPregnant }) {
   const findings = [];
   const rankIdx = RANK_ORDER.indexOf(drug.rank);
 
@@ -244,38 +259,7 @@ function evaluate({ drug, site, age, area, duration, inflammation, formulation, 
     });
   }
 
-  // 6. 剤型
-  if (formulation === "tape") {
-    const isHighRisk = site.thin || rankIdx >= 3 || area === "wide";
-    findings.push({
-      type: isHighRisk ? "deviation" : "caution",
-      title: "【剤型】テープ製剤（密封療法）",
-      detail: site.thin
-        ? `テープ製剤の完全遮閉（ODT）効果で吸収率が著明に上昇します。${site.label}はもともと吸収率の高い部位であり、局所・全身副作用リスクが極めて高くなります。皮膚菲薄部位へのテープ使用は原則回避してください`
-        : "テープ製剤の完全遮閉（ODT）効果で吸収率が大幅に上昇します。苔癬化・肥厚性病変への短期使用に限定し、広範囲・長期使用は避けてください",
-      source: "一般的臨床原則・密封療法の注意事項",
-    });
-  } else if (formulation === "lotion" || formulation === "foam") {
-    if (site.id === "scalp") {
-      findings.push({
-        type: "ok",
-        title: `【剤型】${formulation === "lotion" ? "ローション" : "フォーム"}製剤 × 頭皮`,
-        detail: "頭皮・有毛部への外用ではローション/フォーム剤型が第一選択です。基剤が塗布しやすく患者アドヒアランスの向上が期待できます",
-        source: "GL2024・外用剤型の選択",
-      });
-    }
-  } else if (formulation === "cream") {
-    if (site.id === "eyelid" || site.id === "face" || site.id === "forehead") {
-      findings.push({
-        type: "info",
-        title: "【剤型】クリーム製剤 × 顔面・眼囲",
-        detail: "クリームは軟膏より使用感が良く顔面・眼囲に使いやすいですが、防腐剤（パラベン類等）による接触皮膚炎に注意。刺激が問題になる場合は軟膏への変更を検討してください",
-        source: "一般的臨床原則",
-      });
-    }
-  }
-
-  // 7. 妊婦・授乳婦
+  // 6. 妊婦・授乳婦
   if (isPregnant) {
     const highPotencyWideOrLong = rankIdx >= 3 && (area === "wide" || duration === "long");
     findings.push(highPotencyWideOrLong ? {
@@ -398,12 +382,11 @@ function Chip({ color, children }) {
   );
 }
 
-function SelectedSummary({ drug, site, age, area, duration, inflammation, formulation, isPregnant }) {
+function SelectedSummary({ drug, site, age, area, duration, inflammation, isPregnant }) {
   const ageL  = { infant:"乳幼児", child:"小児", adult:"成人", elderly:"高齢者" };
   const areaL = { small:"狭い", medium:"中程度", wide:"広い" };
   const durL  = { short:"短期（〜2週）", medium:"中期（2〜4週）", long:"長期（4週超）" };
   const infL  = { mild:"軽症", moderate:"中等症", severe:"重症" };
-  const formL = { ointment:"軟膏", cream:"クリーム", lotion:"ローション", foam:"フォーム", tape:"テープ" };
   const ratioLabel = site ? (site.ratio != null ? `×${site.ratio}` : site.rangeLabel || "?") : "";
   return (
     <div style={{ background:"#f8fafc", borderRadius:12, padding:"11px 13px", marginBottom:14, border:"1px solid #e2e8f0" }}>
@@ -411,7 +394,6 @@ function SelectedSummary({ drug, site, age, area, duration, inflammation, formul
       <div style={{ display:"flex", flexWrap:"wrap", gap:5 }}>
         {drug       && <Chip color={RANK_META[drug.rank].color}>{drug.brand}（{RANK_META[drug.rank].groupName}）</Chip>}
         {site       && <Chip color="#0369a1">{site.label}（{ratioLabel}）</Chip>}
-        {formulation && <Chip color="#7c3aed">{formL[formulation]}</Chip>}
         {age        && <Chip color="#6b21a8">{ageL[age]}</Chip>}
         {isPregnant && <Chip color="#db2777">妊婦・授乳婦</Chip>}
         {area       && <Chip color="#065f46">{areaL[area]}</Chip>}
@@ -433,64 +415,80 @@ function SteroidChecker() {
   const [area,        setArea]        = useState(null);
   const [duration,    setDuration]    = useState(null);
   const [inflammation,setInflammation]= useState(null);
-  const [formulation, setFormulation] = useState(null);
   const [isPregnant,  setIsPregnant]  = useState(false);
   const [result,      setResult]      = useState(null);
   const [rankFilter,  setRankFilter]  = useState("ALL");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [showFtu,     setShowFtu]     = useState(false);
+  const [searchQuery,    setSearchQuery]    = useState("");
+  const [showSuggestions,setShowSuggestions]= useState(false);
+  const [showFtu,        setShowFtu]        = useState(false);
 
-  const siteRef   = useRef(null);
-  const patientRef = useRef(null);
-  const resultRef  = useRef(null);
+  const siteRef      = useRef(null);
+  const patientRef   = useRef(null);
+  const resultRef    = useRef(null);
+  const searchWrapRef = useRef(null);
+
+  // サジェスト外クリックで閉じる
+  useEffect(() => {
+    if (!showSuggestions) return;
+    const handler = (e) => {
+      if (searchWrapRef.current && !searchWrapRef.current.contains(e.target)) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showSuggestions]);
 
   const scrollTo = (ref) => setTimeout(() => ref.current?.scrollIntoView({ behavior:"smooth", block:"start" }), 80);
 
-  const tryEval = (drug, site, a, ar, dur, inf, form, preg) => {
+  const tryEval = (drug, site, a, ar, dur, inf, preg) => {
     if (!drug || !site || !a || !ar || !dur) return;
-    setResult(evaluate({ drug, site, age:a, area:ar, duration:dur, inflammation:inf||null, formulation:form||null, isPregnant:!!preg }));
+    setResult(evaluate({ drug, site, age:a, area:ar, duration:dur, inflammation:inf||null, isPregnant:!!preg }));
     scrollTo(resultRef);
   };
 
   const pickDrug = (drug) => {
     setSelDrug(drug);
     setSelSite(null); setAge(null); setArea(null); setDuration(null);
-    setInflammation(null); setFormulation(null); setIsPregnant(false);
+    setInflammation(null); setIsPregnant(false);
     setResult(null);
+    setSearchQuery(""); setShowSuggestions(false);
     scrollTo(siteRef);
   };
   const pickSite = (site) => {
     setSelSite(site);
     setAge(null); setArea(null); setDuration(null);
-    setInflammation(null); setFormulation(null); setIsPregnant(false);
+    setInflammation(null); setIsPregnant(false);
     setResult(null);
     scrollTo(patientRef);
   };
 
-  const pickAge      = (v) => { setAge(v);       tryEval(selDrug, selSite, v,   area,     duration,    inflammation, formulation, isPregnant); };
-  const pickArea     = (v) => { setArea(v);      tryEval(selDrug, selSite, age, v,        duration,    inflammation, formulation, isPregnant); };
-  const pickDuration = (v) => { setDuration(v);  tryEval(selDrug, selSite, age, area,     v,           inflammation, formulation, isPregnant); };
-  const pickForm     = (v) => { const n = formulation === v ? null : v; setFormulation(n); tryEval(selDrug, selSite, age, area, duration, inflammation, n, isPregnant); };
-  const pickPregnant = (v) => { setIsPregnant(v); tryEval(selDrug, selSite, age, area, duration, inflammation, formulation, v); };
+  const pickAge      = (v) => { setAge(v);       tryEval(selDrug, selSite, v,   area,     duration,    inflammation, isPregnant); };
+  const pickArea     = (v) => { setArea(v);      tryEval(selDrug, selSite, age, v,        duration,    inflammation, isPregnant); };
+  const pickDuration = (v) => { setDuration(v);  tryEval(selDrug, selSite, age, area,     v,           inflammation, isPregnant); };
+  const pickPregnant = (v) => { setIsPregnant(v); tryEval(selDrug, selSite, age, area, duration, inflammation, v); };
   const pickInflammation = (v) => {
     const n = inflammation === v ? null : v;
     setInflammation(n);
-    if (result || (age && area && duration)) tryEval(selDrug, selSite, age, area, duration, n, formulation, isPregnant);
+    if (result || (age && area && duration)) tryEval(selDrug, selSite, age, area, duration, n, isPregnant);
   };
 
   const reset = () => {
     setSelDrug(null); setSelSite(null); setAge(null); setArea(null); setDuration(null);
-    setInflammation(null); setFormulation(null); setIsPregnant(false);
-    setResult(null); setRankFilter("ALL"); setSearchQuery(""); setShowFtu(false);
+    setInflammation(null); setIsPregnant(false);
+    setResult(null); setRankFilter("ALL"); setSearchQuery(""); setShowSuggestions(false); setShowFtu(false);
     window.scrollTo({ top:0, behavior:"smooth" });
   };
 
   const filteredDrugs = STEROIDS.filter(d => {
     const matchRank = rankFilter === "ALL" || d.rank === rankFilter;
-    const q = searchQuery.trim().toLowerCase();
-    const matchSearch = !q || d.name.toLowerCase().includes(q) || d.brand.toLowerCase().includes(q);
-    return matchRank && matchSearch;
+    return matchRank && matchesDrug(d, searchQuery);
   });
+
+  // ランクフィルタを無視して全品目からサジェスト（2文字以上で表示）
+  const suggestions = searchQuery.length >= 2
+    ? STEROIDS.filter(d => matchesDrug(d, searchQuery)).slice(0, 8)
+    : [];
 
   const currentStep = result ? 3 : selSite ? 2 : selDrug ? 1 : 0;
 
@@ -534,15 +532,47 @@ function SteroidChecker() {
           })}
         </div>
 
-        {/* Drug search */}
-        <input
-          className="drug-search"
-          type="search"
-          placeholder="一般名・商品名で検索（例：デルモベート、クロベタゾール）"
-          value={searchQuery}
-          onChange={e => setSearchQuery(e.target.value)}
-          aria-label="薬剤名で検索"
-        />
+        {/* Drug search + suggest */}
+        <div ref={searchWrapRef} style={{ position:"relative", marginBottom:10 }}>
+          <input
+            className="drug-search"
+            style={{ marginBottom:0 }}
+            type="search"
+            placeholder="一般名・商品名で検索（ひらがな可：でるも → デルモベート）"
+            value={searchQuery}
+            onChange={e => { setSearchQuery(e.target.value); setShowSuggestions(true); }}
+            onFocus={() => { if (searchQuery.length >= 2) setShowSuggestions(true); }}
+            aria-label="薬剤名で検索"
+            aria-autocomplete="list"
+            aria-expanded={showSuggestions && suggestions.length > 0}
+            autoComplete="off"
+          />
+          {showSuggestions && suggestions.length > 0 && (
+            <div role="listbox" style={{ position:"absolute", top:"calc(100% + 4px)", left:0, right:0, background:"#fff", border:"2px solid #2563eb", borderRadius:12, boxShadow:"0 8px 24px rgba(0,0,0,0.12)", zIndex:200, overflow:"hidden" }}>
+              {suggestions.map(drug => {
+                const m = RANK_META[drug.rank];
+                return (
+                  <button
+                    key={drug.id}
+                    role="option"
+                    onMouseDown={e => { e.preventDefault(); pickDrug(drug); }}
+                    style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"10px 13px", background:"none", border:"none", borderBottom:"1px solid #f1f5f9", cursor:"pointer", fontFamily:"inherit", textAlign:"left" }}
+                    onMouseEnter={e => e.currentTarget.style.background = "#f0f9ff"}
+                    onMouseLeave={e => e.currentTarget.style.background = "none"}
+                  >
+                    <div style={{ background:m.color, color:"#fff", fontWeight:800, fontSize:11, width:24, height:24, borderRadius:5, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                      {drug.rank}
+                    </div>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontSize:13, fontWeight:700, color:"#1e293b" }}>{drug.brand}</div>
+                      <div style={{ fontSize:11, color:"#64748b", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{drug.name}</div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
 
         {filteredDrugs.length === 0
           ? <PlaceholderBox>「{searchQuery}」に一致する薬剤が見つかりません</PlaceholderBox>
@@ -670,17 +700,6 @@ function SteroidChecker() {
               ))}
             </div>
 
-            {/* 剤型（任意） */}
-            <SubLabel>剤型 <span style={{ fontWeight:400, color:"#94a3b8", fontSize:11 }}>（任意・選択するとより詳細なチェックを実施）</span></SubLabel>
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:6, marginBottom:16 }}>
-              {FORMULATIONS.map(f => (
-                <ChoiceBtn key={f.id} active={formulation === f.id} onClick={() => pickForm(f.id)} ariaLabel={f.label}>
-                  <div style={{ fontSize:18 }}>{f.icon}</div>
-                  <div style={{ fontSize:11, fontWeight:700, color:"#1e293b", marginTop:3, textAlign:"center", lineHeight:1.2 }}>{f.label}</div>
-                </ChoiceBtn>
-              ))}
-            </div>
-
             {(!age || !area || !duration) && (
               <div style={{ textAlign:"center", fontSize:12, color:"#94a3b8", padding:"8px", marginTop:4 }}>
                 年齢・面積・期間の3項目を選択すると自動で判定します
@@ -750,7 +769,7 @@ function SteroidChecker() {
             </div>
 
             {/* 選択内容サマリ */}
-            <SelectedSummary drug={selDrug} site={selSite} age={age} area={area} duration={duration} inflammation={inflammation} formulation={formulation} isPregnant={isPregnant}/>
+            <SelectedSummary drug={selDrug} site={selSite} age={age} area={area} duration={duration} inflammation={inflammation} isPregnant={isPregnant}/>
 
             {/* 詳細所見 */}
             <div style={{ marginBottom:12 }}>
